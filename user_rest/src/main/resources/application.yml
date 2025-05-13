@@ -7,5 +7,5 @@ spring:
   banner:
     location: classpath:banner.txt
 
-server:
-  port: 9191
+# server:
+#   port: 9191
