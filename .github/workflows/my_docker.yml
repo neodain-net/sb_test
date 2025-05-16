@@ -12,7 +12,7 @@ jobs:
 
     #runs-on: eclipse-temurin:17-jdk
     #runs-on: amazoncorretto:17-alpine-jdk
-    runs-on: Ubuntu latest
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
