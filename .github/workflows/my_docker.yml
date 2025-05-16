@@ -17,8 +17,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: pwd
-      run : pwd
+      run: pwd
     - name: ls -al
-      run : ls -al
+      run: ls -al
+    - name: cd ./user_rest
+      run: cd ./user_rest
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
