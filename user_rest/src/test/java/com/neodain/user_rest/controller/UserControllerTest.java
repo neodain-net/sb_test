@@ -139,9 +139,7 @@ class UserControllerTest {
 
         User user = new User("David", "david@example.com");
 
-        String content = objectMapper.writeValueAsString(user.getId());
         mockMvc.perform(delete("/users/{id}", user.getId())
-                        .content(content)
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
