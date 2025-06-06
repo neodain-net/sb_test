@@ -1,0 +1,51 @@
+services:
+  
+  mysql:    # container_1 service
+    image: mysql:8.0
+    container_name: mysql80
+    restart: unless-stopped
+    # restart: always  # 도커 시작 시 자동 실행
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOCKER_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DOCKER_MYSQL_DATABASE}
+      MYSQL_USER: ${DOCKER_MYSQL_USER}
+      MYSQL_PASSWORD: ${DOCKER_MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - d:/Database/mysql/docker/mysql80:/var/lib/mysql
+
+    networks:
+      - batch_network
+
+  influxdb:   # container_2 service
+    image: influxdb:1.8
+    container_name: influxdb
+    ports:
+      - "8087:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN}
+
+    restart: unless-stopped
+
+    volumes:
+      - d:/database/influx/docker/influxdb18:/var/lib/influxdb2
+
+    networks:
+      - batch_network
+
+networks:
+  batch_network:
+    driver: bridge
+    # driver_opts:
+      # subnet: "255.255.255.0"
+      # IPAddress: "10.0.0.2"
+
