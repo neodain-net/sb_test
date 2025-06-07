@@ -39,7 +39,6 @@ spring:
     username: neodain
     password: ${MARIADB_PASSWORD} # single datasource 가 아닌 여러개의 datasource를 사용할 경우, 별도의 configuration 파일에서 datasource의 사용을 설정한다면 {{MARIADB_PASSWORD}}로 설정 가능하다.
     # password: {{MARIADB_PASSWORD}} // application.yml에서 설정 할 경우, {{MARIADB_PASSWORD}}로 설정 : single datasource
-
   jpa:
     hibernate:
       ddl-auto: update
