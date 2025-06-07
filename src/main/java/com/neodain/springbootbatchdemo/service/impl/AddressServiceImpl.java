@@ -13,6 +13,7 @@ import com.neodain.springbootbatchdemo.entity.AddressDto.AddressResponse;
 import com.neodain.springbootbatchdemo.entity.DevopsMember;
 import com.neodain.springbootbatchdemo.repository.IAddressRepository;
 import com.neodain.springbootbatchdemo.repository.IDevopsMemberRepository;
+import com.neodain.springbootbatchdemo.repository.ICityRepository;
 import com.neodain.springbootbatchdemo.service.IAddressService;
 
 @Service
@@ -22,6 +23,7 @@ public class AddressServiceImpl implements IAddressService {
 
     private final IAddressRepository repository;
     private final IDevopsMemberRepository memberRepository;
+    private final ICityRepository cityRepository;
 
     @Override
     public AddressResponse create(String memberId, AddressRequest request) {
@@ -32,10 +34,10 @@ public class AddressServiceImpl implements IAddressService {
         Address address = Address.builder()
                 .member(member)
                 .type(request.addressType())
+                .street(request.street())
                 .addressLine(request.addressLine())
-                .city(request.city())
-                .state(request.state())
                 .zipCode(request.zipCode())
+                .city(request.cityId() != null ? cityRepository.findById(request.cityId()).orElse(null) : null)
                 .build();
         repository.save(address);
         return toResponse(address);
@@ -62,10 +64,10 @@ public class AddressServiceImpl implements IAddressService {
         return repository.findById(id)
                 .map(entity -> {
                     entity.setType(request.addressType());
+                    entity.setStreet(request.street());
                     entity.setAddressLine(request.addressLine());
-                    entity.setCity(request.city());
-                    entity.setState(request.state());
                     entity.setZipCode(request.zipCode());
+                    entity.setCity(request.cityId() != null ? cityRepository.findById(request.cityId()).orElse(null) : null);
                     return toResponse(repository.save(entity));
                 }).orElse(null);
     }
@@ -76,12 +78,13 @@ public class AddressServiceImpl implements IAddressService {
     }
 
     private AddressResponse toResponse(Address address) {
+        Long cityId = address.getCity() != null ? address.getCity().getCityId() : null;
         return new AddressResponse(
                 address.getId(),
                 address.getType(),
+                address.getStreet(),
                 address.getAddressLine(),
-                address.getCity(),
-                address.getState(),
-                address.getZipCode());
+                address.getZipCode(),
+                cityId);
     }
 }

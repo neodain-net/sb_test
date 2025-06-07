@@ -1,20 +1,37 @@
 package com.neodain.springbootbatchdemo.entity;
 
-import java.io.Serializable;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+
 import lombok.Getter;
 import lombok.Setter;
+
+
+/**
+ * Entity representing the association between a {@link Devops} and a
+ * {@link DevopsMember}.
+ * <p>
+ * This class maps the join table {@code devops_membership}. The composite
+ * primary key is defined by {@link DevopsMembershipId} which combines
+ * {@code devopsId} and {@code memberId}. These identifiers correspond to the
+ * primary keys of the related {@link Devops} and {@link DevopsMember}
+ * entities. The {@link Role} enum captures the member's role in the
+ * Devops organization.
+ */
+
 
 @Entity
 @Getter
@@ -23,34 +40,29 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 @Table(name = "devops_membership")
-@IdClass(DevopsMembership.DevopsMembershipId.class)
 public class DevopsMembership {
 
   @Id
-  @Column(name = "devops_id", length = 36)
-  private String devopsId;
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-  @Id
-  @Column(name = "member_id", length = 36)
-  private String memberId;
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "devops_id", nullable = false)
+  private Devops devops;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "member_id", nullable = false)
+  private DevopsMember member;
 
   @Enumerated(EnumType.STRING)
-  @Column(name = "role", nullable = false)
+  @Column(name = "role_in_devops", nullable = false)
   private Role role;
 
   @Column(name = "join_date", nullable = false)
-  private LocalDate joinDate;
+  private LocalDateTime joinDate;
 
   public enum Role {
     beginner, maintainer, manager, leader
-  }
-
-  @Data
-  @NoArgsConstructor
-  @AllArgsConstructor
-  public static class DevopsMembershipId implements Serializable {
-    private String devopsId;
-    private String memberId;
   }
 
 }

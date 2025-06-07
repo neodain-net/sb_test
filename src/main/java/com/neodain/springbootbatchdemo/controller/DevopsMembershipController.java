@@ -5,7 +5,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.DevopsMembership.DevopsMembershipId;
 import com.neodain.springbootbatchdemo.entity.MembershipDto.MembershipRequest;
 import com.neodain.springbootbatchdemo.entity.MembershipDto.MembershipResponse;
 import com.neodain.springbootbatchdemo.service.IDevopsMembershipService;
@@ -27,23 +26,21 @@ public class DevopsMembershipController {
         return ResponseEntity.ok(service.getAll());
     }
 
-    @GetMapping("/{devopsId}/{memberId}")
-    public ResponseEntity<MembershipResponse> get(@PathVariable String devopsId,
-                                                  @PathVariable String memberId) {
-        return ResponseEntity.ok(service.get(new DevopsMembershipId(devopsId, memberId)));
+    @GetMapping("/{id}")
+    public ResponseEntity<MembershipResponse> get(@PathVariable Long id) {
+        return ResponseEntity.ok(service.get(id));
     }
 
-    @PutMapping("/{devopsId}/{memberId}")
-    public ResponseEntity<MembershipResponse> update(@PathVariable String devopsId,
-                                                     @PathVariable String memberId,
+    @PutMapping("/{id}")
+    public ResponseEntity<MembershipResponse> update(@PathVariable Long id,
                                                      @RequestBody MembershipRequest request) {
-        return ResponseEntity.ok(service.update(new DevopsMembershipId(devopsId, memberId), request));
+        return ResponseEntity.ok(service.update(id, request));
     }
 
-    @DeleteMapping("/{devopsId}/{memberId}")
-    public ResponseEntity<Void> delete(@PathVariable String devopsId,
-                                       @PathVariable String memberId) {
-        service.delete(new DevopsMembershipId(devopsId, memberId));
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        service.delete(id);
         return ResponseEntity.noContent().build();
     }
+
 }
