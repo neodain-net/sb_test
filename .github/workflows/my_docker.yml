@@ -7,22 +7,41 @@ on:
     branches: [ "master" ]
 
 jobs:
-
   build:
-
-    #runs-on: eclipse-temurin:17-jdk
-    #runs-on: amazoncorretto:17-alpine-jdk
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: pwd
-      run: pwd
-    - name: ls -al
-      run: ls -al
-    - name: cd ./user_rest
-      run: cd ./user_rest | ls -al
-    - name: ls -al
-      run: ls -al
-    #- name: Build the Docker image
-    #  run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+    - name: Build user_rest Docker image
+      run: docker build -t user_rest:latest ./user_rest
+
+
+
+# name: Docker Image CI Test
+
+# on:
+#   push:
+#     branches: [ "master" ]
+#   pull_request:
+#     branches: [ "master" ]
+
+# jobs:
+
+#   build:
+
+#     #runs-on: eclipse-temurin:17-jdk
+#     #runs-on: amazoncorretto:17-alpine-jdk
+#     runs-on: ubuntu-latest
+
+#     steps:
+#     - uses: actions/checkout@v4
+#     - name: pwd
+#       run: pwd
+#     - name: ls -al
+#       run: ls -al
+#     - name: cd ./user_rest
+#       run: cd ./user_rest | ls -al
+#     - name: ls -al
+#       run: ls -al
+#     #- name: Build the Docker image
+#     #  run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)

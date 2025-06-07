@@ -35,3 +35,9 @@ build/
 # Ignore environment variable files containing credentials
 .env
 SpringBootBatchDemo/.env
+
+# macOS
+.DS_Store
+
+# Log files
+*.log
