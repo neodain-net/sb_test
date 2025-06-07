@@ -22,7 +22,7 @@ class DevopsServiceImplTest {
 
     @Autowired
     private DevopsServiceImpl service;
-
+    
     @Autowired
     private IDevopsRepository repository;
 
