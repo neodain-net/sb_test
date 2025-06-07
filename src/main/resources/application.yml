@@ -31,14 +31,14 @@ spring:
     # url: jdbc:mysql://localhost:3306/spring_batch_demo?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Seoul
     url: jdbc:mysql://localhost:3307/demo
     username: neodain
-    password: Kht72@eye1
+    password: {{MYSQL_PASSWORD}} 
 
   datasource:
     driver-class-name: org.mariadb.jdbc.Driver
     url: jdbc:mariadb://localhost:3308/demo
     username: neodain
-    password: Kht72@eye1
-
+    password: ${MARIADB_PASSWORD} # single datasource 가 아닌 여러개의 datasource를 사용할 경우, 별도의 configuration 파일에서 datasource의 사용을 설정한다면 {{MARIADB_PASSWORD}}로 설정 가능하다.
+    # password: {{MARIADB_PASSWORD}} // application.yml에서 설정 할 경우, {{MARIADB_PASSWORD}}로 설정 : single datasource
   jpa:
     hibernate:
       ddl-auto: update
@@ -50,7 +50,7 @@ spring:
 influx:
   url: http://localhost:8087
   username: neodain
-  password: Kht72@eye1
+  password: {{INFLUXDB_PASSWORD}}
   org: neodain 
   bucket: neodain-bucket 
   logLevel: BODY
