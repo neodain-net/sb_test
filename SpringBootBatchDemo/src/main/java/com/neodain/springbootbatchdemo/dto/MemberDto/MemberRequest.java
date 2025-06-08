@@ -1,7 +1,8 @@
 
-package com.neodain.springbootbatchdemo.entity.MemberDto;
+package com.neodain.springbootbatchdemo.dto.MemberDto;
 
-import com.neodain.springbootbatchdemo.entity.DevopsMember.Gender;
+import com.neodain.springbootbatchdemo.store.jpo.DevopsMember.Gender;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

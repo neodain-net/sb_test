@@ -1,7 +1,8 @@
-package com.neodain.springbootbatchdemo.entity.MembershipDto;
+package com.neodain.springbootbatchdemo.dto.MembershipDto;
 
 import java.time.LocalDateTime;
-import com.neodain.springbootbatchdemo.entity.DevopsMembership.Role;
+
+import com.neodain.springbootbatchdemo.store.jpo.DevopsMembership.Role;
 
 public record MembershipResponse(
     Long id,

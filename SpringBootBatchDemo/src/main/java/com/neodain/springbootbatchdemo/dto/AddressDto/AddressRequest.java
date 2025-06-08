@@ -1,6 +1,7 @@
-package com.neodain.springbootbatchdemo.entity.AddressDto;
+package com.neodain.springbootbatchdemo.dto.AddressDto;
 
-import com.neodain.springbootbatchdemo.entity.Address.AddressType;
+import com.neodain.springbootbatchdemo.store.jpo.Address.AddressType;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

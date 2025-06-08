@@ -1,8 +1,9 @@
 package com.neodain.springbootbatchdemo.service;
 
 import java.util.List;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsRequest;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsResponse;
+
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsRequest;
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsResponse;
 
 public interface IDevopsService {
   DevopsResponse create(DevopsRequest request);

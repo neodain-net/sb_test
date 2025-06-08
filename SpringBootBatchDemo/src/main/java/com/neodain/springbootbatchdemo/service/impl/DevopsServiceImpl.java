@@ -9,11 +9,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.Devops;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsRequest;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsResponse;
-import com.neodain.springbootbatchdemo.repository.IDevopsRepository;
+
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsRequest;
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsResponse;
 import com.neodain.springbootbatchdemo.service.IDevopsService;
+import com.neodain.springbootbatchdemo.store.jpo.Devops;
+import com.neodain.springbootbatchdemo.store.repository.IDevopsRepository;
 
 @Service
 @RequiredArgsConstructor

@@ -1,4 +1,4 @@
-package com.neodain.springbootbatchdemo.entity;
+package com.neodain.springbootbatchdemo.store.jpo;
 
 import java.time.LocalDateTime;
 import jakarta.persistence.FetchType;

@@ -8,14 +8,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.DevopsMembership;
-import com.neodain.springbootbatchdemo.entity.DevopsMembership.Role;
-import com.neodain.springbootbatchdemo.entity.MembershipDto.MembershipRequest;
-import com.neodain.springbootbatchdemo.entity.MembershipDto.MembershipResponse;
-import com.neodain.springbootbatchdemo.repository.IDevopsMembershipRepository;
-import com.neodain.springbootbatchdemo.repository.IDevopsMemberRepository;
-import com.neodain.springbootbatchdemo.repository.IDevopsRepository;
+
+import com.neodain.springbootbatchdemo.dto.MembershipDto.MembershipRequest;
+import com.neodain.springbootbatchdemo.dto.MembershipDto.MembershipResponse;
 import com.neodain.springbootbatchdemo.service.IDevopsMembershipService;
+import com.neodain.springbootbatchdemo.store.jpo.DevopsMembership;
+import com.neodain.springbootbatchdemo.store.jpo.DevopsMembership.Role;
+import com.neodain.springbootbatchdemo.store.repository.IDevopsMemberRepository;
+import com.neodain.springbootbatchdemo.store.repository.IDevopsMembershipRepository;
+import com.neodain.springbootbatchdemo.store.repository.IDevopsRepository;
 
 @Service
 @RequiredArgsConstructor

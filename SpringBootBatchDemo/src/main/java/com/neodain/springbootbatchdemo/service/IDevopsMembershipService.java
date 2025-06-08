@@ -1,8 +1,9 @@
 package com.neodain.springbootbatchdemo.service;
 
 import java.util.List;
-import com.neodain.springbootbatchdemo.entity.MembershipDto.MembershipRequest;
-import com.neodain.springbootbatchdemo.entity.MembershipDto.MembershipResponse;
+
+import com.neodain.springbootbatchdemo.dto.MembershipDto.MembershipRequest;
+import com.neodain.springbootbatchdemo.dto.MembershipDto.MembershipResponse;
 
 public interface IDevopsMembershipService {
   MembershipResponse create(MembershipRequest request);

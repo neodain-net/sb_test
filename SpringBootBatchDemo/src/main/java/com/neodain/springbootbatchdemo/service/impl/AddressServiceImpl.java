@@ -7,14 +7,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.Address;
-import com.neodain.springbootbatchdemo.entity.AddressDto.AddressRequest;
-import com.neodain.springbootbatchdemo.entity.AddressDto.AddressResponse;
-import com.neodain.springbootbatchdemo.entity.DevopsMember;
-import com.neodain.springbootbatchdemo.repository.IAddressRepository;
-import com.neodain.springbootbatchdemo.repository.IDevopsMemberRepository;
-import com.neodain.springbootbatchdemo.repository.ICityRepository;
+
+import com.neodain.springbootbatchdemo.dto.AddressDto.AddressRequest;
+import com.neodain.springbootbatchdemo.dto.AddressDto.AddressResponse;
 import com.neodain.springbootbatchdemo.service.IAddressService;
+import com.neodain.springbootbatchdemo.store.jpo.Address;
+import com.neodain.springbootbatchdemo.store.jpo.DevopsMember;
+import com.neodain.springbootbatchdemo.store.repository.IAddressRepository;
+import com.neodain.springbootbatchdemo.store.repository.ICityRepository;
+import com.neodain.springbootbatchdemo.store.repository.IDevopsMemberRepository;
 
 @Service
 @RequiredArgsConstructor

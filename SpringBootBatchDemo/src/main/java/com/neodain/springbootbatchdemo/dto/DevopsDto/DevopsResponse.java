@@ -1,4 +1,4 @@
-package com.neodain.springbootbatchdemo.entity.DevopsDto;
+package com.neodain.springbootbatchdemo.dto.DevopsDto;
 
 import java.time.LocalDateTime;
 

@@ -1,6 +1,6 @@
-package com.neodain.springbootbatchdemo.entity.AddressDto;
+package com.neodain.springbootbatchdemo.dto.AddressDto;
 
-import com.neodain.springbootbatchdemo.entity.Address.AddressType;
+import com.neodain.springbootbatchdemo.store.jpo.Address.AddressType;
 
 public record AddressResponse(
     Long id,

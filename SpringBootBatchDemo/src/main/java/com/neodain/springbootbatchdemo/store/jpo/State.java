@@ -1,4 +1,4 @@
-package com.neodain.springbootbatchdemo.entity;
+package com.neodain.springbootbatchdemo.store.jpo;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

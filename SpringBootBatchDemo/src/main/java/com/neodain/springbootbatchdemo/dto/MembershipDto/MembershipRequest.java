@@ -1,4 +1,4 @@
-package com.neodain.springbootbatchdemo.entity.MembershipDto;
+package com.neodain.springbootbatchdemo.dto.MembershipDto;
 
 import jakarta.validation.constraints.NotBlank;
 

@@ -5,8 +5,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.AddressDto.AddressRequest;
-import com.neodain.springbootbatchdemo.entity.AddressDto.AddressResponse;
+
+import com.neodain.springbootbatchdemo.dto.AddressDto.AddressRequest;
+import com.neodain.springbootbatchdemo.dto.AddressDto.AddressResponse;
 import com.neodain.springbootbatchdemo.service.IAddressService;
 
 @RestController

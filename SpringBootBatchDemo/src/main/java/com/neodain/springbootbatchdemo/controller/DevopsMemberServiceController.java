@@ -5,8 +5,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.MemberDto.MemberRequest;
-import com.neodain.springbootbatchdemo.entity.MemberDto.MemberResponse;
+
+import com.neodain.springbootbatchdemo.dto.MemberDto.MemberRequest;
+import com.neodain.springbootbatchdemo.dto.MemberDto.MemberResponse;
 import com.neodain.springbootbatchdemo.service.IDevopsMemberService;
 
 @RestController

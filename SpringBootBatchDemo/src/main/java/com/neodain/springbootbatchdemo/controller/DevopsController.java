@@ -5,8 +5,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import lombok.RequiredArgsConstructor;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsRequest;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsResponse;
+
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsRequest;
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsResponse;
 import com.neodain.springbootbatchdemo.service.IDevopsService;
 
 @RestController

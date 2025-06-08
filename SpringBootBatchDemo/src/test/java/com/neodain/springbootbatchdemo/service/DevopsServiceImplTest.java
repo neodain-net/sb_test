@@ -1,10 +1,11 @@
 package com.neodain.springbootbatchdemo.service;
 
-import com.neodain.springbootbatchdemo.entity.Devops;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsRequest;
-import com.neodain.springbootbatchdemo.entity.DevopsDto.DevopsResponse;
-import com.neodain.springbootbatchdemo.repository.IDevopsRepository;
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsRequest;
+import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsResponse;
 import com.neodain.springbootbatchdemo.service.impl.DevopsServiceImpl;
+import com.neodain.springbootbatchdemo.store.jpo.Devops;
+import com.neodain.springbootbatchdemo.store.repository.IDevopsRepository;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
