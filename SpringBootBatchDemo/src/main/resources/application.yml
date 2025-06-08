@@ -26,19 +26,26 @@ spring:
 #      # spring5.0 이후 @EnableBatchProceesing을 사용하면 위 옵션을 막아 생성이 안된다.
 #      platform: mariadb
 
-  datasource_h2:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+  # datasource_h2:
+  h2:
+    console:
+      enabled: true       # H2 콘솔을 활성화하여 웹 브라우저에서 H2 데이터베이스를 확인할 수 있도록 한다.
+      path: /h2-console   # H2 콘솔의 경로를 설정한다. 기본값은 /h2-console 이다. (http://localhost:8080/h2-console)
+
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:testdb
     driverClassName: org.h2.Driver
     username: sa
     password:
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
 
-  datasource:
+  jpa:
+    show-sql: true  # Hibernate가 생성하는 SQL을 로그에 출력하도록 설정한다. false로 설정하면 SQL 로그가 출력되지 않는다.
+    hibernate:
+      ddl-auto: create-drop   # ddl-auto: create-drop # 개발 환경에서만 사용, 프로덕션 환경에서는 사용하지 않는다.
+                              # create-drop: 애플리케이션 시작 시 데이터베이스를 생성하고, 종료 시 삭제한다.
+
+  datasource_mysql:
     driver-class-name: com.mysql.cj.jdbc.Driver
     # url: jdbc:mysql://localhost:3306/spring_batch_demo?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Seoul
     url: jdbc:mysql://localhost:3307/demo
