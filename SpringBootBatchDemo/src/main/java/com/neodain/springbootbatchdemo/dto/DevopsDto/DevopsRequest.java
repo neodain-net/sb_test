@@ -4,5 +4,4 @@ import jakarta.validation.constraints.NotBlank;
 
 public record DevopsRequest(
     @NotBlank String name,
-    @NotBlank String intro) {
-}
+    @NotBlank String intro) {}

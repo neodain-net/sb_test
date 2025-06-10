@@ -19,7 +19,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
-
 /**
  * Entity representing the association between a {@link Devops} and a
  * {@link DevopsMember}.
@@ -31,7 +30,6 @@ import lombok.Setter;
  * entities. The {@link Role} enum captures the member's role in the
  * Devops organization.
  */
-
 
 @Entity
 @Getter
@@ -61,8 +59,20 @@ public class DevopsMembership {
   @Column(name = "join_date", nullable = false)
   private LocalDateTime joinDate;
 
-  public enum Role {
-    beginner, maintainer, manager, leader
+  public DevopsMember getMember() {
+    return this.member;
   }
 
+  public enum Role {
+    beginner, maintainer, manager, leader;
+
+    public static Role fromString(String role) {
+      for (Role r : Role.values()) {
+        if (r.name().equalsIgnoreCase(role)) {
+          return r;
+        }
+      }
+      throw new IllegalArgumentException("Invalid role: " + role);
+    }
+  }
 }

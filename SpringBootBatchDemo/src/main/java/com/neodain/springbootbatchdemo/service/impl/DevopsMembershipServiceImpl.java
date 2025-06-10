@@ -84,7 +84,7 @@ public class DevopsMembershipServiceImpl implements IDevopsMembershipService {
                 membership.getMember().getName(),
                 membership.getMember().getEmail(),
                 membership.getMember().getPhoneNum(),
-                membership.getRole(),
+                membership.getRole().name(),
                 membership.getJoinDate());
     }
 }

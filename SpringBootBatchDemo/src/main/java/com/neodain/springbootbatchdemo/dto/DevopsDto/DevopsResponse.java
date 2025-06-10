@@ -6,5 +6,4 @@ public record DevopsResponse(
     String devopsId,
     String name,
     String intro,
-    LocalDateTime foundationTime) {
-}
+    LocalDateTime foundationTime) {}

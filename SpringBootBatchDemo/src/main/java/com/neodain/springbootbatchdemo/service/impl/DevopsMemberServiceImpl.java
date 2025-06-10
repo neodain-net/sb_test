@@ -29,7 +29,7 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
                 .memberId(UUID.randomUUID().toString())
                 .name(request.name())
                 .nickname(request.nickname())
-                .gender(request.gender())
+                .gender(DevopsMember.Gender.fromString(request.gender().toLowerCase()))
                 .birthday(parseDate(request.birthday()))
                 .phoneNum(request.phoneNum())
                 .email(request.email())
@@ -60,7 +60,7 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
                 .map(entity -> {
                     entity.setName(request.name());
                     entity.setNickname(request.nickname());
-                    entity.setGender(request.gender());
+                    entity.setGender(DevopsMember.Gender.fromString(request.gender().toLowerCase()));
                     entity.setBirthday(parseDate(request.birthday()));
                     entity.setPhoneNum(request.phoneNum());
                     entity.setEmail(request.email());
@@ -79,7 +79,7 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
                 member.getMemberId(),
                 member.getName(),
                 member.getNickname(),
-                member.getGender(),
+                member.getGender().name(), // Enum → String 변환
                 birthStr,
                 member.getPhoneNum(),
                 member.getEmail());

@@ -34,7 +34,7 @@ public class AddressServiceImpl implements IAddressService {
         }
         Address address = Address.builder()
                 .member(member)
-                .type(request.addressType())
+                .type(Address.AddressType.fromString(request.addressType().toLowerCase()))
                 .street(request.street())
                 .addressLine(request.addressLine())
                 .zipCode(request.zipCode())
@@ -64,7 +64,7 @@ public class AddressServiceImpl implements IAddressService {
     public AddressResponse update(Long id, AddressRequest request) {
         return repository.findById(id)
                 .map(entity -> {
-                    entity.setType(request.addressType());
+                    entity.setType(Address.AddressType.valueOf(request.addressType().toLowerCase()));
                     entity.setStreet(request.street());
                     entity.setAddressLine(request.addressLine());
                     entity.setZipCode(request.zipCode());
@@ -82,7 +82,7 @@ public class AddressServiceImpl implements IAddressService {
         Long cityId = address.getCity() != null ? address.getCity().getCityId() : null;
         return new AddressResponse(
                 address.getId(),
-                address.getType(),
+                address.getType().name(), // Enum → String 변환
                 address.getStreet(),
                 address.getAddressLine(),
                 address.getZipCode(),
