@@ -53,15 +53,11 @@ public class DevopsMembership {
   private DevopsMember member;
 
   @Enumerated(EnumType.STRING)
-  @Column(name = "role_in_devops", nullable = false)
+  @Column(name = "role", nullable = false)
   private Role role;
 
   @Column(name = "join_date", nullable = false)
   private LocalDateTime joinDate;
-
-  public DevopsMember getMember() {
-    return this.member;
-  }
 
   public enum Role {
     beginner, maintainer, manager, leader;

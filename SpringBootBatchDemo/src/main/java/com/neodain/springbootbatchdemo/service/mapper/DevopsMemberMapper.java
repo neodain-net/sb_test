@@ -34,7 +34,6 @@ public class DevopsMemberMapper {
     return DevopsMember.builder()
         // .memberId(request.getMemberId()) // Use the correct getter method
         .name(request.name())
-        .nickname(request.nickname())
         .gender(DevopsMember.Gender.valueOf(request.gender().toLowerCase())) // String → Enum 변환
         .birthday(date)
         .phoneNum(request.phoneNum())
@@ -50,7 +49,6 @@ public class DevopsMemberMapper {
     return new MemberResponse(
         entity.getMemberId(), // Assuming memberId is already a String
         entity.getName(),
-        entity.getNickname(),
         entity.getGender().name(), // Enum → String 변환
         formattedDate,
         // new SimpleDateFormat("yyyy-MM-dd").format(entity.getBirthday()), // Format date to String

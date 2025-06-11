@@ -42,12 +42,11 @@ public class Address {
   @Column(name = "street", nullable = false, length = 200)
   private String street;
 
+  @Column(name = "city", nullable = false, length = 200)
+  private String city;
+
   @Column(name = "address_line", length = 200)
   private String addressLine;
-
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "city_id")
-  private City city;
 
   @Column(name = "zip_code", length = 20)
   private String zipCode;
@@ -73,56 +72,6 @@ public class Address {
       }
       throw new IllegalArgumentException("Invalid addressType: " + type);
     }
-  }
-
-  /**
-   * Custom Builder for Address with additional validation and flexibility.
-   */
-  public static class AddressBuilder {
-    private AddressType type;
-    private String street;
-    private String addressLine;
-    private City city;
-    private String zipCode;
-
-    public AddressBuilder type(AddressType type) {
-      this.type = type; // Safe conversion from String to Enum
-      return this;
-    }
-
-    public AddressBuilder street(String street) {
-      if (street == null || street.isEmpty()) {
-        throw new IllegalArgumentException("Street cannot be null or empty");
-      }
-      this.street = street;
-      return this;
-    }
-
-    public AddressBuilder addressLine(String addressLine) {
-      this.addressLine = addressLine;
-      return this;
-    }
-
-    public AddressBuilder city(City city) {
-      this.city = city;
-      return this;
-    }
-
-    public AddressBuilder zipCode(String zipCode) {
-      this.zipCode = zipCode;
-      return this;
-    }
-
-    public Address build() {
-      Address address = new Address();
-      address.type = this.type;
-      address.street = this.street;
-      address.addressLine = this.addressLine;
-      address.city = this.city;
-      address.zipCode = this.zipCode;
-      return address;
-    }
-
   }
 
 }

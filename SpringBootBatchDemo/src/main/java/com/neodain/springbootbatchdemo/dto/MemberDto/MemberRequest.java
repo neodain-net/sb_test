@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Pattern;
 
 public record MemberRequest(
     @NotBlank(message = "이름은 필수입니다.") String name,
-    String nickname,
     String gender,
     String birthday,
     @NotBlank @Pattern(regexp = "^\\d{10,13}$") String phoneNum,

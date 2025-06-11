@@ -6,9 +6,12 @@ spring:
 
 logging:
   level:
-    root: INFO
-    org.springframework.batch.item.database: DEBUG
-    okhttp3: WARN
+    root: INFO  # 기본 로그 레벨은 INFO로 유지
+    # org.springframework.batch.item.database: DEBUG
+    # com.neodain.springbootbatchdemo.service: DEBUG  # service 패키지의 로그 레벨을 DEBUG로 설정
+    # com.neodain.springbootbatchdemo.controller: DEBUG  # controller 패키지의 로그 레벨을 DEBUG로 설정
+    com.neodain.springbootbatchdemo.service.impl.DevopsMemberServiceImpl: DEBUG # DevopsMemberServiceImpl 클래스의 로그 레벨을 DEBUG로 설정
+    # okhttp3: WARN
 
 ---
 
@@ -16,6 +19,11 @@ spring:
   config:
     activate:
       on-profile: local
+
+  cloud:
+    task:
+      enabled: false  # Spring Cloud Task 기능을 비활성화하여 TransactionManager 충돌 문제를 방지한다.
+      # enabled: true  # Spring Cloud Task 기능을 활성화하려면 주석을 제거한다. 
 
 #  batch:
 #    job:

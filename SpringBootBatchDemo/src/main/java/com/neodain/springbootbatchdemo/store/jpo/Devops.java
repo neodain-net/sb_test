@@ -1,14 +1,12 @@
 package com.neodain.springbootbatchdemo.store.jpo;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 // import org.springframework.beans.BeanUtils;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
@@ -24,7 +22,7 @@ import lombok.Setter;
 @Builder
 @Table(name = "devops")
 public class Devops {
-  @Id
+  @Id 
   @Column(name = "devops_id", length = 36)
   private String devopsId;
 
@@ -33,9 +31,6 @@ public class Devops {
 
   @Column(nullable = false, length = 100)
   private String intro;
-
-  @OneToMany(mappedBy = "devops")
-  private List<DevopsMembership> devopsMemberships;
 
   @Column(name = "foundation_time")
   private LocalDateTime foundationTime;

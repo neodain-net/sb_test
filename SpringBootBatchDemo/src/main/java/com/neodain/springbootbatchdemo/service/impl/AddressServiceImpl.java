@@ -14,7 +14,6 @@ import com.neodain.springbootbatchdemo.service.IAddressService;
 import com.neodain.springbootbatchdemo.store.jpo.Address;
 import com.neodain.springbootbatchdemo.store.jpo.DevopsMember;
 import com.neodain.springbootbatchdemo.store.repository.IAddressRepository;
-import com.neodain.springbootbatchdemo.store.repository.ICityRepository;
 import com.neodain.springbootbatchdemo.store.repository.IDevopsMemberRepository;
 
 @Service
@@ -24,7 +23,6 @@ public class AddressServiceImpl implements IAddressService {
 
     private final IAddressRepository repository;
     private final IDevopsMemberRepository memberRepository;
-    private final ICityRepository cityRepository;
 
     @Override
     public AddressResponse create(String memberId, AddressRequest request) {
@@ -38,7 +36,7 @@ public class AddressServiceImpl implements IAddressService {
                 .street(request.street())
                 .addressLine(request.addressLine())
                 .zipCode(request.zipCode())
-                .city(request.cityId() != null ? cityRepository.findById(request.cityId()).orElse(null) : null)
+                .city(request.city())
                 .build();
         repository.save(address);
         return toResponse(address);
@@ -68,7 +66,6 @@ public class AddressServiceImpl implements IAddressService {
                     entity.setStreet(request.street());
                     entity.setAddressLine(request.addressLine());
                     entity.setZipCode(request.zipCode());
-                    entity.setCity(request.cityId() != null ? cityRepository.findById(request.cityId()).orElse(null) : null);
                     return toResponse(repository.save(entity));
                 }).orElse(null);
     }
@@ -79,13 +76,13 @@ public class AddressServiceImpl implements IAddressService {
     }
 
     private AddressResponse toResponse(Address address) {
-        Long cityId = address.getCity() != null ? address.getCity().getCityId() : null;
         return new AddressResponse(
                 address.getId(),
                 address.getType().name(), // Enum → String 변환
+                address.getCity(),
                 address.getStreet(),
                 address.getAddressLine(),
-                address.getZipCode(),
-                cityId);
+                address.getZipCode()
+                );
     }
 }

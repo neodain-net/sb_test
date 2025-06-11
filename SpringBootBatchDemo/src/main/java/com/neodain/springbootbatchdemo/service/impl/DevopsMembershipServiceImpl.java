@@ -81,9 +81,7 @@ public class DevopsMembershipServiceImpl implements IDevopsMembershipService {
         return new MembershipResponse(
                 membership.getId(),
                 membership.getMember().getMemberId(),
-                membership.getMember().getName(),
-                membership.getMember().getEmail(),
-                membership.getMember().getPhoneNum(),
+                membership.getDevops().getDevopsId(),
                 membership.getRole().name(),
                 membership.getJoinDate());
     }

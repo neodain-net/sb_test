@@ -11,7 +11,8 @@ import com.neodain.springbootbatchdemo.store.repository.IDevopsRepository;
 public class DevopsMembershipMapper {
 
   // DTO → Entity 변환
-  public static DevopsMembership toEntity(MembershipRequest request, IDevopsMemberRepository memberRepository, IDevopsRepository devopsRepository) {
+  public static DevopsMembership toEntity(MembershipRequest request, IDevopsMemberRepository memberRepository,
+      IDevopsRepository devopsRepository) {
     DevopsMember member = memberRepository.findById(request.memberId())
         .orElseThrow(() -> new RuntimeException("Member not found with ID: " + request.memberId()));
 
@@ -27,12 +28,10 @@ public class DevopsMembershipMapper {
   // Entity → DTO 변환
   public static MembershipResponse toDto(DevopsMembership entity) {
     return new MembershipResponse(
-        entity.getId(),
-        entity.getMember().getMemberId(),
-        entity.getMember().getName(),
-        entity.getMember().getEmail(),
-        entity.getMember().getPhoneNum(),
-        entity.getRole().name(), // Enum → String 변환
-        entity.getJoinDate());
+      entity.getId(),
+      entity.getMember().getMemberId(),
+      entity.getDevops().getDevopsId(),
+      entity.getRole().name(), // Enum → String 변환
+      entity.getJoinDate());
   }
 }

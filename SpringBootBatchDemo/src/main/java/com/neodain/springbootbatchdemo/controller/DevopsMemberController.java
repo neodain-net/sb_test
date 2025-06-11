@@ -13,7 +13,7 @@ import com.neodain.springbootbatchdemo.service.IDevopsMemberService;
 @RestController
 @RequestMapping("/members")
 @RequiredArgsConstructor
-public class DevopsMemberServiceController {
+public class DevopsMemberController {
 
     private final IDevopsMemberService service;
 
