@@ -3,6 +3,7 @@ package com.neodain.springbootbatchdemo.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsRequest;
 import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsResponse;
+import com.neodain.springbootbatchdemo.exception.NotFoundException;
 import com.neodain.springbootbatchdemo.service.IDevopsService;
 
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +33,7 @@ class DevopsControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockitoBean 
+    @MockitoBean
     private IDevopsService devopsService;
 
     @Test
@@ -43,8 +44,8 @@ class DevopsControllerTest {
         Mockito.when(devopsService.create(any(DevopsRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/devops")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.devopsId").value(response.devopsId()))
                 .andExpect(jsonPath("$.name").value("team"));
@@ -64,6 +65,18 @@ class DevopsControllerTest {
                 .andExpect(jsonPath("$.name").value("team"));
 
         verify(devopsService).get("id1");
+    }
+
+    @Test
+    @DisplayName("get devops not found")
+    void getDevopsNotFound() throws Exception {
+        Mockito.when(devopsService.get("id2"))
+                .thenThrow(new NotFoundException("not found"));
+
+        mockMvc.perform(get("/devops/{id}", "id2"))
+                .andExpect(status().isNotFound());
+
+        verify(devopsService).get("id2");
     }
 
     @Test
@@ -88,8 +101,8 @@ class DevopsControllerTest {
         Mockito.when(devopsService.update(eq("id1"), any(DevopsRequest.class))).thenReturn(response);
 
         mockMvc.perform(put("/devops/{id}", "id1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("team2"));
 

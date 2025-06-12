@@ -1,6 +1,7 @@
 package com.neodain.springbootbatchdemo.controller;
 
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +21,16 @@ public class DevopsMemberController {
     @PostMapping
     public ResponseEntity<MemberResponse> create(@RequestBody MemberRequest request) {
         return ResponseEntity.ok(service.create(request));
+        // << GlobalExceptionHandler로 모든 예외를 처리 >>
+        // try-catch 블록을 사용하여 따로, 개별적으로 예외를 처리할 수도 있지만,
+        // 이 경우에는 GlobalExceptionHandler가 모든 예외를 처리할 수 있으므로
+        // try-catch 블록을 사용하지 않아도 됩니다.
+        // try { // If the member already exists, an AlreadyExistsException will be
+        // thrown
+        // return ResponseEntity.ok(service.create(request));
+        // } catch (AlreadyExistsException e) {
+        // return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        // }
     }
 
     @GetMapping("/{id}")
@@ -34,7 +45,7 @@ public class DevopsMemberController {
 
     @PutMapping("/{id}")
     public ResponseEntity<MemberResponse> update(@PathVariable("id") String id,
-                                                 @RequestBody MemberRequest request) {
+            @RequestBody MemberRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 

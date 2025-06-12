@@ -1,6 +1,7 @@
 package com.neodain.springbootbatchdemo.controller;
 
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,7 +35,7 @@ public class DevopsMembershipController {
 
     @PutMapping("/{id}")
     public ResponseEntity<MembershipResponse> update(@PathVariable Long id,
-                                                     @RequestBody MembershipRequest request) {
+            @RequestBody MembershipRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 

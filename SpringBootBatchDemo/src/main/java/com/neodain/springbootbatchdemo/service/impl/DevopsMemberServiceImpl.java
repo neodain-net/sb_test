@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 
 import com.neodain.springbootbatchdemo.dto.MemberDto.MemberRequest;
 import com.neodain.springbootbatchdemo.dto.MemberDto.MemberResponse;
+import com.neodain.springbootbatchdemo.exception.AlreadyExistsException;
+import com.neodain.springbootbatchdemo.exception.NotFoundException;
 import com.neodain.springbootbatchdemo.service.IDevopsMemberService;
 import com.neodain.springbootbatchdemo.store.jpo.DevopsMember;
 import com.neodain.springbootbatchdemo.store.repository.IDevopsMemberRepository;
@@ -31,6 +33,12 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
     @Override
     public MemberResponse create(MemberRequest request) {
         logger.info("Creating a new DevopsMember with name: {}", request.name());
+        if (repository.existsByPhoneNum(request.phoneNum())) {
+            throw new AlreadyExistsException("Member already exists with phone number : " + request.phoneNum());
+        }
+        if (repository.existsByEmail(request.email())) {
+            throw new AlreadyExistsException("Member already exists with email : " + request.email());
+        }
         DevopsMember member = DevopsMember.builder()
                 .memberId(UUID.randomUUID().toString())
                 .name(request.name())
@@ -40,7 +48,6 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
                 .email(request.email())
                 .build();
         repository.save(member);
-        logger.info("DevopsMember created successfully with ID: {}", member.getMemberId());
         return toResponse(member);
     }
 
@@ -50,10 +57,9 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
         logger.debug("Fetching DevopsMember with ID: {}", memberId);
         return repository.findById(memberId)
                 .map(this::toResponse)
-                // .orElse(null);
-                .orElseGet(() -> {
+                .orElseThrow(() -> {
                     logger.warn("DevopsMember with ID: {} not found", memberId);
-                    return null;
+                    return new NotFoundException("DevopsMember not found with ID: " + memberId);
                 });
     }
 
@@ -76,12 +82,10 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
                     entity.setBirthday(parseDate(request.birthday()));
                     entity.setPhoneNum(request.phoneNum());
                     entity.setEmail(request.email());
-                    logger.info("DevopsMember with ID: {} updated successfully", memberId);
                     return toResponse(repository.save(entity));
-                // }).orElse(null);
-                }).orElseGet(() -> {
-                    logger.warn("DevopsMember with ID: {} not found for update", memberId);
-                    return null;
+                }).orElseThrow(() -> {
+                    logger.warn("DevopsMember with ID: {} not found", memberId);
+                    return new NotFoundException("DevopsMember not found with ID: " + memberId);
                 });
     }
 
@@ -89,7 +93,6 @@ public class DevopsMemberServiceImpl implements IDevopsMemberService {
     public void delete(String memberId) {
         logger.info("Deleting DevopsMember with ID: {}", memberId);
         repository.deleteById(memberId);
-        logger.info("DevopsMember with ID: {} deleted successfully", memberId);
     }
 
     private MemberResponse toResponse(DevopsMember member) {

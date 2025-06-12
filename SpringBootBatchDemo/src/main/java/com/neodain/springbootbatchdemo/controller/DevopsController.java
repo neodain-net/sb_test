@@ -1,6 +1,7 @@
 package com.neodain.springbootbatchdemo.controller;
 
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,7 +35,7 @@ public class DevopsController {
 
     @PutMapping("/{id}")
     public ResponseEntity<DevopsResponse> update(@PathVariable("id") String id,
-                                                 @RequestBody DevopsRequest request) {
+            @RequestBody DevopsRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 

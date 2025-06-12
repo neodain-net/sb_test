@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 
 import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsRequest;
 import com.neodain.springbootbatchdemo.dto.DevopsDto.DevopsResponse;
+import com.neodain.springbootbatchdemo.exception.AlreadyExistsException;
+import com.neodain.springbootbatchdemo.exception.NotFoundException;
 import com.neodain.springbootbatchdemo.service.IDevopsService;
 import com.neodain.springbootbatchdemo.store.jpo.Devops;
 import com.neodain.springbootbatchdemo.store.repository.IDevopsRepository;
@@ -25,6 +27,9 @@ public class DevopsServiceImpl implements IDevopsService {
 
     @Override
     public DevopsResponse create(DevopsRequest request) {
+        if (repository.existsByName(request.name())) {
+            throw new AlreadyExistsException("Devops already exists : " + request.name());
+        }
         Devops devops = Devops.builder()
                 .devopsId(UUID.randomUUID().toString())
                 .name(request.name())
@@ -40,7 +45,9 @@ public class DevopsServiceImpl implements IDevopsService {
     public DevopsResponse get(String devopsId) {
         return repository.findById(devopsId)
                 .map(this::toResponse)
-                .orElse(null);
+                .orElseThrow(() -> new NotFoundException("DevOps not found with ID: " + devopsId));
+        // If you want to return null instead of throwing an exception, you can use:
+        // return repository.findById(devopsId).map(this::toResponse).orElse(null);
     }
 
     @Override
@@ -58,7 +65,7 @@ public class DevopsServiceImpl implements IDevopsService {
                     entity.setName(request.name());
                     entity.setIntro(request.intro());
                     return toResponse(repository.save(entity));
-                }).orElse(null);
+                }).orElseThrow(() -> new NotFoundException("DevOps not found with ID: " + devopsId));
     }
 
     @Override

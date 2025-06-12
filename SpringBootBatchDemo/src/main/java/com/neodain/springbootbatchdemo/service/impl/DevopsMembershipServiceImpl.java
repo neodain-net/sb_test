@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 
 import com.neodain.springbootbatchdemo.dto.MembershipDto.MembershipRequest;
 import com.neodain.springbootbatchdemo.dto.MembershipDto.MembershipResponse;
+import com.neodain.springbootbatchdemo.exception.AlreadyExistsException;
+import com.neodain.springbootbatchdemo.exception.NotFoundException;
 import com.neodain.springbootbatchdemo.service.IDevopsMembershipService;
 import com.neodain.springbootbatchdemo.store.jpo.DevopsMembership;
 import com.neodain.springbootbatchdemo.store.jpo.DevopsMembership.Role;
@@ -29,11 +31,18 @@ public class DevopsMembershipServiceImpl implements IDevopsMembershipService {
 
     @Override
     public MembershipResponse create(MembershipRequest request) {
-        var devops = devopsRepository.findById(request.devopsId()).orElse(null);
-        var member = memberRepository.findById(request.memberId()).orElse(null);
-        if (devops == null || member == null) {
-            return null;
+        var devops = devopsRepository.findById(request.devopsId())
+                .orElseThrow(() -> new NotFoundException("Devops not found widh devopsId : " + request.devopsId()));
+        // If devops is not found, throw NotFoundException
+        var member = memberRepository.findById(request.memberId())
+                .orElseThrow(() -> new NotFoundException("Devops not found with memberId : " + request.memberId()));
+        // If member is not found, throw NotFoundException
+
+        if (repository.existsByDevops_DevopsIdAndMember_MemberId(request.devopsId(), request.memberId())) {
+            throw new AlreadyExistsException("Membership already exists for devopsId : " + request.devopsId() +
+                    " and memberId : " + request.memberId());
         }
+
         DevopsMembership membership = DevopsMembership.builder()
                 .devops(devops)
                 .member(member)
@@ -49,7 +58,7 @@ public class DevopsMembershipServiceImpl implements IDevopsMembershipService {
     public MembershipResponse get(Long id) {
         return repository.findById(id)
                 .map(this::toResponse)
-                .orElse(null);
+                .orElseThrow(() -> new NotFoundException("Devops not found with ID : " + id));
     }
 
     @Override
@@ -69,7 +78,7 @@ public class DevopsMembershipServiceImpl implements IDevopsMembershipService {
                     entity.setDevops(devops);
                     entity.setMember(member);
                     return toResponse(repository.save(entity));
-                }).orElse(null);
+                }).orElseThrow(() -> new NotFoundException("Devops not found with ID : " + id));
     }
 
     @Override

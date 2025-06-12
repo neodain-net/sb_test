@@ -1,6 +1,7 @@
 package com.neodain.springbootbatchdemo.controller;
 
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +20,7 @@ public class AddressController {
 
     @PostMapping("/member/{memberId}")
     public ResponseEntity<AddressResponse> create(@PathVariable String memberId,
-                                                  @RequestBody AddressRequest request) {
+            @RequestBody AddressRequest request) {
         return ResponseEntity.ok(service.create(memberId, request));
     }
 
@@ -35,7 +36,7 @@ public class AddressController {
 
     @PutMapping("/{id}")
     public ResponseEntity<AddressResponse> update(@PathVariable Long id,
-                                                  @RequestBody AddressRequest request) {
+            @RequestBody AddressRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
