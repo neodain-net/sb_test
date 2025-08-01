@@ -1,0 +1,17 @@
+# templates/skipper-service.yaml
+{{- if .Values.scdf.skipper.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: skipper
+  labels:
+    {{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.scdf.skipper.service.type }}
+  ports:
+    - port: 7577
+      targetPort: 7577
+      nodePort: {{ .Values.scdf.skipper.service.nodePort }}
+  selector:
+    app: skipper
+{{- end }}

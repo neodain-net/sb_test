@@ -1,0 +1,65 @@
+### templates/configmap.yaml
+## 10개의 batch job을 루프를 통해 자동 Config 한다
+{{- $root := . }}
+{{- range .Values.batchJobs.jobs }} # values.yaml의 values를 참조(.Values)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $root.Release }}-{{ .name }} {{/* name: {{ include "batch-job.fullname" $root }}-{{ .name }}-config */}}
+  labels:
+    {{- include "batch-job.labels" $root | nindent 4 }} 
+data:
+  application.yaml: |
+    application:
+      name: {{ .name }}
+    spring:
+      batch:
+        job:
+          name: {{ .name }}
+          enabled: true
+        jdbc:
+          initialize-schema: always {{/* 운용시에는 Never */}}
+          platform: mysql
+      datasource: {{/* 하나의 db : 10개의 Job meta data 저장 */}}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://neo-batch-job.neodain.svc.cluster.local:3306/demo 
+      datasource_reader: {{/* 외부의 db로 부터 read하기 위한 정보 */}}
+        driver_class_name: {{ .datasource.driver_class_name }} 
+        url: {{ .datasource.url }}
+        username: {{ .datasource.username }}
+        password: {{ .datasource.password }}
+{{- if eq .datasource_sub.enabled true }} 
+      datasource_reader_sub: {{/* 외부의 db로 부터 read하기 위한 정보(sub) */}}
+        driver_class_name: {{ .datasource_sub.driver_class_name }} 
+        url: {{ .datasource_sub.url }}
+        username: {{ .datasource_sub.username }}
+        password: {{ .datasource_sub.password }}
+{{- end }}
+    influx:
+      url: {{ .influx.url }} 
+{{- if $root.Values.influxdb }}
+{{- if $root.Values.influxdb.env }}
+{{- range $root.Values.influxdb.env }}
+      {{- if eq .name "DOCKER_INFLUXDB_INIT_ORG" }}
+      org: {{ .value }} 
+      {{- end }}
+      {{- if eq .name "DOCKER_INFLUXDB_INIT_BUCKET" }}
+      bucket: {{ .value }} 
+      {{- end }}
+      {{- if eq .name "DOCKER_INFLUXDB_INIT_ADMIN_TOKEN" }}
+      token: {{ .value }} 
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+      logLevel: {{ .influx.logLevel }} 
+      readTimeout: {{ .influx.readTimeout }}
+      writeTimeout: {{ .influx.writeTimeout }}
+      connectTimeout: {{ .influx.connectTimeout }}
+    logging:
+      level:
+        root: INFO
+        org.springframework.batch.item.database: DEBUG
+        {{/* org.springframework.cloud.task: DEBUG */}}
+{{- end }}
+

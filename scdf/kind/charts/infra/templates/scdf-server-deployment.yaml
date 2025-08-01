@@ -1,0 +1,32 @@
+# templates/scdf-server-deployment.yaml
+{{- if .Values.scdf.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scdf-server
+  labels:
+    {{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scdf-server
+  template:
+    metadata:
+      labels:
+        app: scdf-server
+    spec:
+      containers:
+        - name: scdf-server
+          image: {{ .Values.scdf.image.repository }}:{{ .Values.scdf.image.tag | default "2.11.5" }}
+          imagePullPolicy: {{ .Values.scdf.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: 9393
+          env:
+            {{- range .Values.scdf.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          resources: {{- toYaml .Values.scdf.resources | nindent 12 }}
+      nodeSelector: {{- toYaml .Values.scdf.server.nodeSelector | nindent 8 }}
+{{- end }}

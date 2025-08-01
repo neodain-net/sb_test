@@ -1,0 +1,25 @@
+# 📦 values-task.yaml
+# SCDF Task용 Helm Chart 설정 (10개 Task 앱)
+
+batchTasks:
+  enabled: true
+  tasks:
+    - name: batch-task-01
+      image: batch-task-01:latest
+      command:
+        - "--spring.cloud.task.name=task01"
+        - "--input.date=202507110600"
+      service:
+        port: 8091
+      nodeSelector:
+        role: work
+    - name: batch-task-02
+      image: batch-task-02:latest
+      command:
+        - "--spring.cloud.task.name=task02"
+        - "--input.date=202507110700"
+      service:
+        port: 8092
+      nodeSelector:
+        role: work
+# ... batch-task-03 ~ batch-task-10 추가 가능

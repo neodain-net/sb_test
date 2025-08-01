@@ -1,0 +1,146 @@
+# 🧾 Helm Chart: 실무형 템플릿 구조 (values.yaml 기반)
+# 목적: Kind + K8s 운영 환경에서 Spring Batch + SCDF + 모니터링 시스템 배포
+
+# 디렉터리 구조 개요 (mychart/)
+
+mychart/
+├── Chart.yaml                    # 차트 메타 정보 정의 (이름, 버전 등)
+├── values.yaml                  # 사용자 정의 변수 파일 (이미 작성됨)
+├── templates/                   # 쿠버네티스 리소스 템플릿
+│   ├── _helpers.tpl             # 공통 템플릿 함수 정의 (name, label 등)
+│   ├── deployment.yaml          # 배포할 Pod/컨테이너 정의 (SpringBoot 앱 등)
+│   ├── service.yaml             # Service 포트 노출 정의 (ClusterIP / NodePort)
+│   ├── pvc.yaml                 # PersistentVolumeClaim 템플릿 (DB, Influx 등)
+│   ├── secret.yaml              # DB, 토큰 등 민감 정보 분리 저장
+│   ├── configmap.yaml           # 환경설정 파일 (.properties / .yml) 전달용
+│   ├── ingress.yaml             # Ingress 접근 제어 및 도메인 연결 설정
+│   └── scdf-config.yaml         # SCDF Server + Skipper 관련 설정 템플릿
+└── README.md                   # Helm Chart 사용 설명서 (옵션 목록 포함)
+
+
+# 각 템플릿 파일 설명 요약:
+
+## 🧩 1. Chart.yaml
+```yaml
+apiVersion: v2
+name: monitoring-batch-platform
+version: 0.1.0
+description: 실무형 SCDF + Batch + Influx + Grafana Helm Chart
+appVersion: "1.0"
+```
+
+## 🧩 2. templates/deployment.yaml (공통 템플릿)
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  labels:
+    app: {{ include "mychart.name" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mychart.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "mychart.name" . }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "mychart.fullname" . }}-config
+            - secretRef:
+                name: {{ include "mychart.fullname" . }}-secret
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+```
+
+## 🧩 3. templates/service.yaml
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mychart.fullname" . }}
+spec:
+  type: NodePort
+  selector:
+    app: {{ include "mychart.name" . }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      nodePort: {{ .Values.service.nodePort }}
+```
+
+## 🧩 4. templates/pvc.yaml
+```yaml
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.persistence.existingClaim | default (printf "%s-pvc" .Chart.Name) }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+{{- end }}
+```
+
+## 🧩 5. templates/secret.yaml
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "mychart.fullname" . }}-secret
+  labels:
+    app: {{ include "mychart.name" . }}
+type: Opaque
+data:
+  MYSQL_PASSWORD: {{ .Values.auth.password | b64enc }}
+  INFLUXDB_TOKEN: {{ .Values.env.INFLUXDB_ADMIN_TOKEN | b64enc }}
+```
+
+## 🧩 6. templates/configmap.yaml
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mychart.fullname" . }}-config
+  labels:
+    app: {{ include "mychart.name" . }}
+data:
+  TZ: "Asia/Seoul"
+```
+
+## 🧩 7. templates/ingress.yaml
+```yaml
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "mychart.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}
+```
+
+---

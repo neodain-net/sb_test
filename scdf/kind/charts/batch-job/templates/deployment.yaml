@@ -1,0 +1,78 @@
+## templates/deployment.yaml (공통 템플릿) 
+## 10개의 batch job을 루프를 통해 자동 Deploy 한다
+{{- $root := . }}
+{{- range .Values.batchJobs.jobs }} # values.yaml의 values를 참조(.Values)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "batch-job.fullname" $root }}
+  labels:
+    {{- include "batch-job.labels" $root | nindent 4 }}
+spec:
+  replicas: {{ .replicaCount }} 
+  selector:
+    matchLabels:
+      app: {{ include "batch-job.name" $root }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "batch-job.name" $root }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .pullPolicy | default "IfNotPresent" }}
+          env:
+{{- range .env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+{{- end }}
+          args:
+{{- range .command }}
+            - {{ . | quote }}
+{{- end }}
+          ports:
+            - containerPort: {{ .service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ .name }}-config
+            - secretRef:
+                name: {{ .name }}-secret
+          resources:
+            limits:
+              memory: {{ .resources.limits.memory }}
+              cpu: {{ .resources.limits.cpu }}
+            requests:
+              memory: {{ .resources.requests.memory }}
+              cpu: {{ .resources.requests.cpu }}
+          volumeMounts:
+{{- range .volumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+{{- end }}
+          livenessProbe:
+            {{- toYaml .livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .readinessProbe | nindent 12 }}
+      volumes:
+{{- if .configMap.enabled }}
+        - name: config-volume
+          configMap:
+            name: {{ .configMap.name }}
+{{- end }}
+      restartPolicy:
+        {{ .restartPolicy | default "Never" }} 
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      affinity: {{/* affinity: {{- toYaml .affinity | nindent 8 }} */}}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - {{ .nodeSelector.role }}
+      tolerations:
+        {{- toYaml .tolerations | nindent 8 }}
+{{- end }}

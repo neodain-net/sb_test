@@ -1,0 +1,80 @@
+# 📦 values-infra.yaml
+# 인프라 서비스 공통 설정 (DB, Influx, Grafana 등)
+
+mysql:
+  enabled: true
+  image:
+    repository: mysql
+    tag: "8.0"
+  auth:
+    rootPassword: root
+    database: demo
+    username: neodain
+    password: Kht72@eye1
+  service:
+    port: 3306
+    nodePort: 3307
+  persistence:
+    enabled: true
+    mountPath: /var/lib/mysql
+    existingClaim: mysql-pvc
+  nodeSelector:
+    role: work
+
+influxdb:
+  enabled: true
+  image:
+    repository: influxdb
+    tag: latest
+  env:
+    - name: DOCKER_INFLUXDB_INIT_MODE
+      value: setup
+    - name: DOCKER_INFLUXDB_INIT_USERNAME
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_PASSWORD
+      value: Kht72@eye1
+    - name: DOCKER_INFLUXDB_INIT_ORG
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_BUCKET
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+      value: xxxxxxxxxxxxxxxx 
+  service:
+    port: 8086
+    nodePort: 8087
+  persistence:
+    enabled: true
+    mountPath: /var/lib/influxdb2
+    existingClaim: influxdb-pvc
+  nodeSelector:
+    role: main
+
+grafana:
+  enabled: true
+  image:
+    repository: grafana/grafana
+    tag: latest
+  service:
+    port: 3000
+    nodePort: 3001
+  persistence:
+    enabled: true
+    mountPath: /var/lib/grafana
+    existingClaim: grafana-pvc
+  dependsOn:
+    - influxdb
+  nodeSelector:
+    role: main
+
+scdf:
+  enabled: true
+  nodeSelector:
+    role: main
+  externalDatabase:
+    host: mariadb
+    port: 3306
+    user: neodain
+    password: Kht72@eye1
+    database: demo
+  skipper:
+    enabled: true

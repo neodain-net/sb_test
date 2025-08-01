@@ -1,0 +1,18 @@
+{{- $root := . }}
+{{- range .Values.batchTasks.tasks }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "batch-task.fullname" $root }}
+  labels:
+    {{- include "batch-task.labels" $root | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    app: {{ include "batch-task.name" $root }}
+  ports:
+    - name: TCP 
+      port: {{ .service.port }}
+      targetPort: {{ .service.port }}
+      nodePort: {{ add 30000 .service.port }}
+{{- end }}

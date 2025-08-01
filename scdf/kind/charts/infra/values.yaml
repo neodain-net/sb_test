@@ -1,0 +1,113 @@
+# - 배치 구성: Spring Batch Job (10개) + SCDF Task 기반 Spring Batch (10개)
+# - 목적: 외부 DB → 데이터 추출 → 변환 → InfluxDB 저장 → Grafana/Prometheus 시각화
+# - Helm 기반으로 배포, Kind에서 테스트 후 K8s 운영 반영
+
+Release:
+  Name: "rel"
+  Service: "spring-batch"
+
+mysql:
+  enabled: true
+  image:
+    repository: mysql
+    tag: "8.0"
+  auth:
+    rootPassword: root
+    database: demo
+    username: neodain
+    password: Kht72@eye1
+  service:
+    port: 3306
+    nodePort: 3307
+  persistence:
+    enabled: true
+    mountPath: /var/lib/mysql
+    existingClaim: mysql-pvc
+  nodeSelector:
+    role: work
+
+mariadb:
+  enabled: true
+  image:
+    repository: mariadb
+    tag: "10"
+  auth:
+    rootPassword: root
+    database: demo
+    username: neodain
+    password: Kht72@eye1
+  service:
+    port: 3306
+    nodePort: 3308
+  persistence:
+    enabled: true
+    mountPath: /var/lib/mysql
+    existingClaim: mariadb-pvc
+  nodeSelector:
+    role: work
+
+influxdb:
+  enabled: true
+  image:
+    repository: influxdb
+    tag: latest
+  env:
+    - name: DOCKER_INFLUXDB_INIT_MODE
+      value: setup
+    - name: DOCKER_INFLUXDB_INIT_USERNAME
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_PASSWORD
+      value: Kht72@eye1
+    - name: DOCKER_INFLUXDB_INIT_ORG
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_BUCKET
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+      value: xxxxxxxxxxxxxx 
+  service:
+    port: 8086
+    nodePort: 8087
+  persistence:
+    enabled: true
+    mountPath: /var/lib/influxdb2
+    existingClaim: influxdb-pvc
+  nodeSelector:
+    role: control 
+
+grafana:
+  enabled: true
+  image:
+    repository: grafana/grafana
+    tag: latest
+  service:
+    port: 3000
+    nodePort: 3001
+  persistence:
+    enabled: true
+    mountPath: /var/lib/grafana
+    existingClaim: grafana-pvc
+  dependsOn:
+    - influxdb
+  admin:
+    user: admin
+    password: admin
+  nodeSelector:
+    role: control 
+
+# ✨ SCDF 관련 설정
+scdf:
+  enabled: true
+  image: springcloud/spring-cloud-dataflow-server:2.11.2
+  skipperImage: springcloud/spring-cloud-skipper-server:2.9.1
+  nodeSelector:
+    role: control 
+  externalDatabase:
+  # db:
+    host: mariadb
+    port: 3306
+    user: neodain
+    password: Kht72@eye1
+    database: demo
+  skipper:
+    enabled: true
+

@@ -1,0 +1,65 @@
+## templates/deployment.yaml (공통 템플릿)
+{{- $root := . }}
+{{- range .Values.batchTasks.tasks }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "batch-task.fullname" $root }}
+  labels:
+    {{- include "batch-task.labels" $root | nindent 4 }}
+spec:
+  replicas: {{ .replicaCount }} 
+  selector:
+    matchLabels:
+      app: {{ include "batch-task.name" $root }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "batch-task.name" $root }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .pullPolicy | default "IfNotPresent" }}
+          args: {{ toJson .arguments }}
+          env:
+{{- range .env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+{{- end }}
+          args:
+{{- range .command }}
+            - {{ . | quote }}
+{{- end }}
+          ports:
+            - containerPort: {{ .service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ .name }}-config
+            - secretRef:
+                name: {{ .name }}-secret
+          resources:
+            limits:
+              memory: {{ .resources.limits.memory }}
+              cpu: {{ .resources.limits.cpu }}
+            requests:
+              memory: {{ .resources.requests.memory }}
+              cpu: {{ .resources.requests.cpu }}
+          volumeMounts:
+{{- range .volumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+{{- end }}
+          livenessProbe: {{- toYaml .livenessProbe | nindent 12 }}
+          readinessProbe: {{- toYaml .readinessProbe | nindent 12 }}
+      volumes:
+{{- if .configMap.enabled }}
+        - name: config-volume 
+          configMap:
+            name: {{ .configMap.name }}
+{{- end }}
+      restartPolicy: {{ .restartPolicy | default "Never" }}
+      nodeSelector: {{- toYaml .nodeSelector | nindent 8 }}
+      affinity: {{- toYaml .affinity | nindent 8 }}
+      tolerations: {{- toYaml .tolerations | nindent 8 }}
+{{- end }}

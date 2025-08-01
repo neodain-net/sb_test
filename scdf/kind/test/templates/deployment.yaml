@@ -1,0 +1,44 @@
+## 🧩 2. templates/deployment.yaml (공통 템플릿)
+{{- range .Values.batchApps.apps }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  labels:
+    app: {{ .name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: {{ .image }}
+          imagePullPolicy: {{ .pullPolicy }}
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ env.springProfile }}
+            - name: JOB_CRON_EXPRESSION
+              value: {{ env.jobCron }}
+          ports:
+            - containerPort: {{ .service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ .name }}-config
+            - secretRef:
+                name: {{ .name }}-secret
+      restartPolicy: {{ restartPolicy | defaut "Always" }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "batch-job"
+          effect: "NoSchedule"
+      affinity: {}
+{{- end }}

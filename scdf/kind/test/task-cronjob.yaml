@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scdf-task
+spec:
+  schedule: "*/5 * * * *"   # 매 5분 주기 실행
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: task
+            image: myrepo/scdf-task:0.0.1
+            args:
+              - "--chunk_size=100"
+          restartPolicy: Never

@@ -1,0 +1,6 @@
+# 차트 메타 정보 정의 (이름, 버전 등)
+apiVersion: v2
+name: infra
+version: 0.0.1
+description: Influx + Grafana + MySql + Maria + SCDF Helm Chart
+appVersion: "0.1"

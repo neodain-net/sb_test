@@ -1,0 +1,8 @@
+# 차트 메타 정보 정의 (이름, 버전 등)
+## 🧩 1. Chart.yaml
+
+apiVersion: v2
+name: monitor-batch
+version: 0.1.0
+description: 실무형 SCDF + Batch + Influx + Grafana Helm Chart
+appVersion: "1.0"

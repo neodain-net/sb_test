@@ -1,0 +1,26 @@
+# Helm을 이용해 SCDF 서버,  Skipper 서버를 설치할 때 MariaDB 연결 정보와 함께 설정.
+# SCDF에서 Task 실행 시 이 정보가 메타데이터 저장소(MariaDB)에 사용.
+# Helm : Kubernetes 앱 설치 관리도구
+# values.yaml : Helm 설치 시 사용자 정의 값을 지정하는 설정파일
+
+dataflow:
+  server:
+    env:
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/taskdb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: rootpass
+
+  skipper:
+    server:
+      env:
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/taskdb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: rootpass
+
+  mariadb:
+    enabled: true
+    auth:
+      rootPassword: rootpass
+      database: taskdb
+
+

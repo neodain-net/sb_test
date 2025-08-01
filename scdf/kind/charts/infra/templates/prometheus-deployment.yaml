@@ -1,0 +1,15 @@
+# templates/prometheus.yaml
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.prometheus.server.persistentVolume.size }}
+  storageClassName: {{ .Values.prometheus.server.persistentVolume.storageClass }}
+{{- end }}
+

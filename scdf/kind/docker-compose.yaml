@@ -1,0 +1,111 @@
+services:
+  
+  mysql:    # container_1 service
+    image: mysql:8.0
+    container_name: mysql80
+    restart: unless-stopped
+    # restart: always  # 도커 시작 시 자동 실행
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOCKER_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DOCKER_MYSQL_DATABASE}
+      MYSQL_USER: ${DOCKER_MYSQL_USER}
+      MYSQL_PASSWORD: ${DOCKER_MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - d:/Database/mysql/docker/mysql80:/var/lib/mysql
+
+    networks:
+      - batch_network
+
+
+  mariadb:    # container_2 service
+    image: mariadb:10
+    container_name: mariadb
+    restart: unless-stopped
+    # restart: always  # 도커 시작 시 자동 실행
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOCKER_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DOCKER_MYSQL_DATABASE}
+      MYSQL_USER: ${DOCKER_MYSQL_USER}
+      MYSQL_PASSWORD: ${DOCKER_MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+
+    ports:
+      - "3308:3306"
+
+    volumes:
+      - d:/Database/mariadb/docker/mariadb10:/var/lib/mysql
+
+    networks:
+      - batch_network
+
+
+  influxdb:   # container_3 service
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8087:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN}
+
+    restart: unless-stopped
+
+    volumes:
+      - d:/database/influx/docker/influxdb:/var/lib/influxdb2
+
+    networks:
+      - batch_network
+
+  grafana:    # container_4 service
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+
+    restart: unless-stopped
+
+    depends_on:
+      - influxdb  # influx container
+
+    volumes:
+      - d:/database/grafana/docker/grafana10:/var/lib/grafana
+
+    networks:
+      - batch_network
+
+  spring-batch:
+    image: neo-batch-task:0.0.1
+    container_name: spring-batch-task 
+    command:
+      - "--rtm.batch.job.start=202507091730"
+      - "--rtm.batch.job.end=202507091740"
+      - "--rtm.batch.job.chunk=200"
+      - "--rtm.batch.job.interval=10"
+      - "--rtm.batch.job.delay=5"
+    ports:
+      - "8083:8080"
+
+    # restart: unless-stopped 
+
+    depends_on:
+      - mariadb  # mariadb container
+
+    networks:
+      - batch_network
+
+networks:
+  batch_network:
+    driver: bridge
+    # driver_opts:
+      # subnet: "255.255.255.0"
+      # IPAddress: "10.0.0.2"
+

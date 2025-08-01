@@ -1,0 +1,517 @@
+# Kind 기반 로컬 테스트와 실운영 Kubernetes 배포 가능 설계
+
+# - 배치 구성: Spring Batch Job (2개) + SCDF Task 기반 Spring Batch (1개)
+# - 목적: 외부 DB → 데이터 추출 → 변환 → InfluxDB 저장 → Grafana/Prometheus 시각화
+# - Helm 기반으로 배포, Kind에서 테스트 후 K8s 운영 반영
+#
+# - kubectl apply -f test-job.yaml
+# - kubectl get pods -o wide
+# - kubectl logs job/test-job
+# - Kubectl get nodes : 노드이름 확인
+#
+# - kubectl taint nodes <노드이름> <key>=<value>:<effect>
+# - nodes : 리소스 유형 (taint를 설정할 대상은 node)
+# - <effect> : NoSchedule, PreferNoSchedule, NoExecute (taint의 동작 방식)
+# - NoSchedule : 조건을 만족하지 않으면 절대 스케줄되지 않음
+# - PreferNoSchedule : 가능하면 스케줄 안 하지만, 불가피하면 배치 가능
+# - NoExecute : 조건 불만족 시 기존에 있던 Pod도 퇴출됨
+# - kubectl taint nodes love-cluster-worker role=work-1:NoSchedule
+# - kubectl taint nodes love-cluster-worker type=job:NoSchedule
+#
+# - kubectl label nodes love-cluster-worker name=oppa-love-node
+# - kubectl get nodes --show-labels
+# - kubectl label node love-cluster-worker emoji=💗
+
+Release:
+  Name: "default"
+  Service: "spring-batch"
+
+batchJobs:
+  enabled: true
+  jobs:
+    - name: batch-job-01
+      replicaCount: 1
+      image: # neo-batch-job:0.0.1
+        repository: neo-batch-job
+        tag: 0.0.1
+        pullPolicy: IfNotPresent
+          # Always : 매번 새 이미지 Pull (latest 태그나 개발 환경에서)
+          # IfNotPresent : 로컬에 없으면 Pull (테스트 / 배포용 개발 이미지)
+          # Never : 절대 Pull 안 함 (로컬에서 만든 이미지만 사용할 때(Kind 등)
+      restartPolicy: Never   # Job이 실패해도 자동 재시작하지 않음 (일회성 작업)
+        # 주기적인 batch job 실행 후 종료되는 경우
+        # Always : 항상 재 시작 (Deployment)
+        # OnFailure : 실패 시 재 시작 (Job / Pod)
+        # Never : 절대 재 시작 안함 (Job / Pod)
+      datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+        driver_class_name: com.mysql.cj.jdbc.Driver 
+        url: jdbc:mysql://job01-datasource.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+      datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+        enabled: true
+        driver_class_name: com.mysql.cj.jdbc.Driver 
+        url: jdbc:mysql://job01-datasource.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+      influx:
+        url: http://influxdb:8086
+        logLevel: BODY
+        readTimeout: 5s
+        writeTimeout: 5s
+        connectTimeout: 5s
+      env: 
+        - name: springProfile
+          value: local 
+        - name: jobCron 
+          value: "*/5 * * * *" 
+          # 5분 주기 (설정순서 : 분 시 일 월 요일)
+      command:     # ["java", "-jar", "/app/app.jar"]
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8080
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 250m
+          memory: 256Mi
+      nodeSelector:                   # 해당 Pod가 배치될 Node를 label로 지정
+        role: work-1                  # label key: 'role', value: 'work-1' 인 노드에만 배치
+      affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                    - work-1          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+      tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
+        - key: "type"                 # 노드에 taint로 설정된 key
+          operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+          value: "job"                # 해당 값이 "job"일 경우만 이 Pod는 스케줄링 허용됨
+          effect: "NotSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+      volumeMounts:
+        - name: config-volume
+          mountPath: /config          # 설정파일이 마운트될 경로
+          readOnly: true              # 읽기 전용
+      volumes:
+        - name: config-volume
+          configMap:
+            name: batch-job-01-config    # 참조할 ConfigMap 이름
+      configMap:
+        enabled: true
+        name: batch-job-01-config
+        files:
+          - application.yaml
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        linitialDelaySeconds: 15
+        periodSeconds: 5
+
+    - name: batch-job-02
+      replicaCount: 1
+      image:
+        repository: neo-batch-job
+        tag: 0.0.1
+        pullPolicy: IfNotPresent
+      restartPolicy: Never
+      datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+        driver_class_name: com.mysql.cj.jdbc.Driver 
+        url: jdbc:mysql://job02-datasource.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+      datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+        enabled: true
+        driver_class_name: com.mysql.cj.jdbc.Driver 
+        url: jdbc:mysql://job01-datasource.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+      influx:
+        url: http://influxdb:8086
+        logLevel: BODY
+        readTimeout: 5s
+        writeTimeout: 5s
+        connectTimeout: 5s
+      env: 
+        - name: springProfile
+          value: local 
+        - name: jobCron 
+          value: "* */5 * * * *" 
+      command: 
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8081
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 250m
+          memory: 256Mi
+      nodeSelector:
+        role: work-1
+      affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                    - work-1          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+      tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
+        - key: "type"                 # 노드에 taint로 설정된 key
+          operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+          value: "job"                # 해당 값이 "job"일 경우만 이 Pod는 스케줄링 허용됨
+          effect: "NotSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+      volumeMounts:
+        - name: config-volume
+          mountPath: /config          # 설정파일이 마운트될 경로
+          readOnly: true              # 읽기 전용
+      volumes:
+        - name: config-volume
+          configMap:
+            name: batch-job-02-config    # 참조할 ConfigMap 이름
+      configMap:
+        enabled: true
+        name: batch-job-02-config
+        files:
+          - application.yaml
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        linitialDelaySeconds: 15
+        periodSeconds: 5
+
+batchTasks:
+  enabled: true
+  tasks:
+    - name: batch-task-01
+      replicaCount: 1
+      image:
+        repository: neo-batch-task
+        tag: 0.0.1
+        pullPolicy: IfNotPresent
+      restartPolicy: Never
+      datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+        url: jdbc:mysql://task01-datasource.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+      arguments:
+        - "--runDate=2025-07-10" 
+          # task launch my-batch-task --arguments "--runData=2005-07-10" 시 
+          # spring.batch.job.enabled=true 일 경우, 자동으로 JobParameter로 인식
+          # JobLauncherApplicationRunner가 자동 실행
+      env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "local"
+        - name: TASK_EXECUTION_ID
+          value: "ID0001"
+        - name: task_name
+          value: "task01"
+        - name: springProfile
+          value: local
+        - name: jobCron
+          value: "* */5 * * * *" 
+      command: 
+        - "--spring.cloud.task.name=task01"
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8090
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 250m
+          memory: 256Mi
+      nodeSelector:
+        role: work-2
+      affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                    - work-2          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+      tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
+        - key: "type"                 # 노드에 taint로 설정된 key
+          operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+          value: "task"                # 해당 값이 "task"일 경우만 이 Pod는 스케줄링 허용됨
+          effect: "NotSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+      volumeMounts:
+        - name: config-volume
+          mountPath: /config          # 설정파일이 마운트될 경로
+          readOnly: true              # 읽기 전용
+      volumes:
+        - name: config-volume
+          configMap:
+            name: batch-task-01-config    # 참조할 ConfigMap 이름
+      configMap:
+        enabled: true
+        name: batch-task-01-config
+        files:
+          - application.yaml
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        linitialDelaySeconds: 15
+        periodSeconds: 5
+
+mysql:
+  enabled: true
+  image:
+    repository: mysql
+    tag: "8.0"
+    pullPolicy: IfNotPresent
+  env:
+    - name: rootPassword
+      value: root
+    - name: database
+      value: demo
+    - name: username
+      value: neodain
+    - name: password
+      value: Kht72@eye1
+  resources:
+    limits:
+      memory: 2048Mi
+      cpu: 1000m
+    requests:
+      memory: 1024Mi
+      cpu: 500m
+  service:
+    port: 3306
+    nodePort: 3307
+  persistence:
+    enabled: true
+    mountPath: /var/lib/mysql
+    existingClaim: mysql-pvc
+    size: 2Gi
+  nodeSelector:
+    role: work-1
+
+mariadb:
+  enabled: true
+  image:
+    repository: mariadb
+    tag: "10"
+    pullPolicy: IfNotPresent
+  env:
+    - name: rootPassword
+      value: root
+    - name: database
+      value: demo
+    - name: username
+      value: neodain
+    - name: password
+      value: Kht72@eye1
+  service:
+    port: 3306
+    nodePort: 3308
+  persistence:
+    enabled: true
+    mountPath: /var/lib/mysql
+    existingClaim: mariadb-pvc
+    size: 2Gi
+  nodeSelector:
+    role: work-2
+
+influxdb:
+  enabled: true
+  image:
+    repository: influxdb
+    tag: latest
+    pullPolicy: IfNotPresent
+  env:
+    - name: DOCKER_INFLUXDB_INIT_MODE
+      value: setup
+    - name: DOCKER_INFLUXDB_INIT_USERNAME
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_PASSWORD
+      value: Kht72@eye1
+    - name: DOCKER_INFLUXDB_INIT_ORG
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_BUCKET
+      value: neodain
+    - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+      value: xxxxxxxxxxxxxxxx 
+  service:
+    port: 8086
+    nodePort: 8087
+  persistence:
+    enabled: true
+    mountPath: /var/lib/influxdb2
+    existingClaim: influxdb-pvc
+    size: 2Gi
+  nodeSelector:
+    role: control
+
+grafana:
+  enabled: true
+  image:
+    repository: grafana/grafana
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 3000
+    nodePort: 3001
+  persistence:
+    enabled: true
+    mountPath: /var/lib/grafana
+    existingClaim: grafana-pvc
+  dependsOn:
+    - influxdb
+  admin: 
+    # existingSecret: grafana-admin-secret
+    user: admin
+    password: admin
+  nodeSelector:
+    role: control
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-server
+          access: proxy
+          isDefault: true
+        - name: InfluxDB
+          type: influxdb
+          url: http://influxdb:8086
+          access: proxy
+          database: mybucket
+
+prometheus:
+  enabled: true
+  image:
+    repository: bitnami/prometheus 
+    tag: latest
+  server:
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 250m
+    persistentVolume:
+      enabled: true
+      storageClass: standard
+      size: 8Gi
+    nodeSelector:
+      role: control 
+
+
+# ✨ SCDF 관련 설정
+scdf:
+  enabled: true
+  image:
+    repository: bitnami/spring-cloud-dataflow 
+    tag: 2.11.5
+    pullPolicy: IfNotPresent
+  server:
+    service:
+      type: NodePort 
+      port: 31000 
+    resource:
+      limits:
+        memory: 2048Mi
+        cpu: 1000m
+      requests:
+        memory: 1024Mi
+        cpu: 500m
+    nodeSelector:
+      role: control
+    mariadb:
+      enabled: false                            # 내부 mariadb 비 활성화
+    externalDatabase:    
+      host: mariadb.default.svc.cluster.local   # DNS 이름:<service-name>.<namespace>.svc.cluster.local
+      port: 3306
+      database: demo
+      user: neodain
+      password: Kht72@eye1
+      database: demo
+  skipper:
+    enabled: true
+    image:
+      repository: bitnami/spring-cloud-skipper
+      tag: 2.11.5
+      pullPolicy: IfNotPresent
+    service:
+      type: NodePort
+      nodePort: 31080
+    resource:
+      limits:
+        memory: 1024Mi
+        cpu: 500m
+      requests:
+        memory: 512Mi
+        cpu: 250m
+    nodeSelector:
+      role: control
+  dataflow:
+    server:
+      database:
+        type: mariadb
+  config:
+    spring:
+      datasource:
+        url: jdbc:mariadb://mariadb.default.svc.cluster.local:3306/scdf_meta
+        username: scdf
+        password: scdfpass
+        driverClassName: org.mariadb.jdbc.Driver
+      cloud:
+        dataflow:
+          task:
+            platform:
+              kubernetes:
+                accounts:
+                  default:
+                    namespace: default
+                    imagePullPolicy: IfNotPresent
+  features:
+    streaming:
+      enabled: false
+    rabbitmq:
+      enabled: false

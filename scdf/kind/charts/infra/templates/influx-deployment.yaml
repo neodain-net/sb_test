@@ -1,0 +1,39 @@
+{{- if .Values.influxdb.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb
+  labels:
+    {{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      nodeSelector:
+        node-type: control
+      containers:
+        - name: influxdb
+          image: {{ .Values.influxdb.image.repository }}:{{ .Values.influxdb.image.tag }}
+          imagePullPolicy: {{ .Values.influxdb.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            {{- range .Values.influxdb.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          ports:
+            - containerPort: 8086
+          volumeMounts:
+            - name: influxdb-storage
+              mountPath: /var/lib/influxdb2
+      volumes:
+        - name: influxdb-storage
+          persistentVolumeClaim:
+            claimName: influxdb-pvc
+{{- end }}
+

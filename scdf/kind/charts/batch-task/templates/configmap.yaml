@@ -1,0 +1,19 @@
+### templates/configmap.yaml
+{{ $root := . }}
+{{- range .Values.batchTasks.tasks }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: batch-task-config
+  labels:
+    {{- include "batch-task.labels" $root | nindent 4 }}
+data:
+  application.yml: |
+    spring:
+      cloud:
+        task:
+          name: {{ include "selectByName" (list "task_name" .env) }} 
+    logging:
+      level:
+        root: INFO
+{{- end }}

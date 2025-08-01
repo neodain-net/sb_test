@@ -1,0 +1,61 @@
+{{- if .Values.scdf.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scdf-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scdf-server
+  template:
+    metadata:
+      labels:
+        app: scdf-server
+    spec:
+      nodeSelector:
+        node-type: control
+      containers:
+        - name: scdf-server
+          image: {{ .Values.scdf.image }}
+          ports:
+            - containerPort: 9393
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://{{ .Values.scdf.db.host }}:{{ .Values.scdf.db.port }}/{{ .Values.scdf.db.database }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.scdf.db.user }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: {{ .Values.scdf.db.password }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skipper-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: skipper-server
+  template:
+    metadata:
+      labels:
+        app: skipper-server
+    spec:
+      nodeSelector:
+        node-type: control
+      containers:
+        - name: skipper-server
+          image: {{ .Values.scdf.skipperImage }}
+          ports:
+            - containerPort: 7577
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://{{ .Values.scdf.db.host }}:{{ .Values.scdf.db.port }}/{{ .Values.scdf.db.database }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.scdf.db.user }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: {{ .Values.scdf.db.password }}
+{{- end }}
+

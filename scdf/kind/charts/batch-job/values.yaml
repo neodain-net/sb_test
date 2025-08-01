@@ -1,0 +1,41 @@
+# Kind 기반 로컬 테스트와 실운영 Kubernetes 배포 가능 설계
+
+# - 배치 구성: Spring Batch Job (10개) + SCDF Task 기반 Spring Batch (10개)
+# - 목적: 외부 DB → 데이터 추출 → 변환 → InfluxDB 저장 → Grafana/Prometheus 시각화
+# - Helm 기반으로 배포, Kind에서 테스트 후 K8s 운영 반영
+
+Release:
+  Name: "rel"
+  Service: "spring-batch"
+  Description: "spring-batch-job-basic-template"
+
+batchJobs:
+  enabled: true
+  jobs:
+    - name: batch-job-00
+      image: 
+        repository: neo-batch-job
+        tag: 0.0.1
+        pullPolicy: IfNotPresent
+          # Always : 매번 새 이미지 Pull (latest 태그나 개발 환경에서)
+          # IfNotPresent : 로컬에 없으면 Pull (테스트 / 배포용 개발 이미지)
+          # Never : 절대 Pull 안 함 (로컬에서 만든 이미지만 사용할 때(Kind 등)
+      restartPolicy: Never # 주기적인 batch job 실행 후 종료되는 경우
+        # Always : 항상 재 시작 (Deployment)
+        # OnFailure : 실패 시 재 시작 (Job / Pod)
+        # Never : 절대 재 시작 안함 (Job / Pod)
+      env: 
+        - name: springProfile
+          value: local 
+        - name: jobCron 
+          value: "*/5 * * * *" # 5분 주기 (설정순서 : 분 시 일 월 요일)
+      command:  # ["java", "-jar", "/app/app.jar"]
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8080
+      nodeSelector:
+        role: work-1

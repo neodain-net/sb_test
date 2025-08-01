@@ -1,0 +1,42 @@
+# kind-config.yaml
+# Kind 클러스터 설정 - control-plane 1개, worker 노드 2개 
+# 배치 작업(Job과 Task)가 각기 다른 워커 노드에 배치되도록 세분화
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control
+    extraPortMappings:
+      # Grafana (30030), SCDF UI (30080), InfluxDB UI (30886), Prometheus(30550)
+      - containerPort: 30030
+        hostPort: 30030
+        protocol: TCP
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+      - containerPort: 30550
+        hostPort: 30550
+        protocol: TCP
+      - containerPort: 30886
+        hostPort: 30886
+        protocol: TCP
+  - role: worker-1
+    labels:
+      role: work-1   # work-1로 레이블 설정
+      type: job
+    extraPortMappings:
+      - containerPort: 9091
+        hostPort: 9091
+        protocol: TCP
+  - role: worker-2
+    labels:
+      role: work-2   # work-2로 레이블 설정
+      type: task
+    extraPortMappings:
+      - containerPort: 9092
+        hostPort: 9092
+        protocol: TCP
+
+# 주의사항:
+# - worker 1 (job-worker): 배치 작업용 Job 10개
+# - worker 2 (task-worker): SCDF Task 10개
+# - 노드에서 작업을 구분하기 위해 labels로 worker 노드의 역할 구분

@@ -1,0 +1,31 @@
+# 📦 values-job.yaml
+# Spring Batch Job 전용 Helm Chart 설정 (10개 배치잡 자동화)
+
+batchJobs:
+  enabled: true
+  jobs:
+    - name: batch-job-01
+      image: batch-job-01:latest
+      command:
+        - "--rtm.batch.job.start=202507110600"
+        - "--rtm.batch.job.end=202507110700"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8081
+      nodeSelector:
+        role: work
+    - name: batch-job-02
+      image: batch-job-02:latest
+      command:
+        - "--rtm.batch.job.start=202507110700"
+        - "--rtm.batch.job.end=202507110800"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8082
+      nodeSelector:
+        role: work
+# ... batch-job-03 ~ batch-job-10 추가 가능

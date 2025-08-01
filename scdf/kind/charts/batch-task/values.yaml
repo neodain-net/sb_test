@@ -1,0 +1,33 @@
+# - 배치 구성: Spring Batch Job (10개) + SCDF Task 기반 Spring Batch (10개)
+# - 목적: 외부 DB → 데이터 추출 → 변환 → InfluxDB 저장 → Grafana/Prometheus 시각화
+# - Helm 기반으로 배포, Kind에서 테스트 후 K8s 운영 반영
+
+Release:
+  Name: "rel"
+  Service: "spring-batch"
+
+batchTasks:
+  enabled: true
+  tasks:
+    - name: batch-task-01
+      image: 
+        repository: neo-batch-task
+        tag: 0.0.1
+        pullPolicy: IfNotPresent
+      restartPolicy: Never
+      env: 
+        - name: springProfile
+          value: local 
+        - name: jobCron 
+          value: 0, 0/5, 0, 0, 0
+      command: #["java", "-jar", "/app/app.jar"]
+        - "--spring.cloud.task.name=task01"
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+      service:
+        port: 8090
+      nodeSelector:
+        role: work-2
