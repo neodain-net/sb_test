@@ -5,12 +5,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
-// 이 클래스는 전역 예외 처리기를 구현하기 위한 기본 구조입니다.
+// 이 클래스는 전역 예외 처리기를 구현하기 위한 기본 구조이다.
 
-// 이 클래스에 필요한 예외 처리 메서드를 추가하여 전역 예외 처리를 구현할 수 있습니다.
+// 이 클래스에 필요한 예외 처리 메서드를 추가하여 전역 예외 처리를 구현할 수 있다.
 // 예외 처리 메서드는 @ExceptionHandler 어노테이션을 사용하여 특정 예외를 처리하거나
-// @ControllerAdvice 어노테이션을 사용하여 모든 컨트롤러에서 발생하는 예외를 처리할 수 있습니다.
-// 예외 처리 메서드는 ResponseEntity를 반환하여 HTTP 상태 코드와 응답 본문을 설정할 수 있습니다.
+// @ControllerAdvice 어노테이션을 사용하여 모든 컨트롤러에서 발생하는 예외를 처리할 수 있다.
+// 예외 처리 메서드는 ResponseEntity를 반환하여 HTTP 상태 코드와 응답 본문을 설정할 수 있다.
 // 예외 처리 메서드의 예:
 // @ExceptionHandler(AlreadyExistsException.class)
 // public ResponseEntity<String> handleAlreadyExistsException(AlreadyExistsException ex) {
