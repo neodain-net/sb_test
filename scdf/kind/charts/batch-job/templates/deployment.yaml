@@ -5,18 +5,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "batch-job.fullname" $root }}
+  name: {{ $root.Release.Name }}-{{ .name }} {{/* name: {{ include "batch-job.fullname" $root }} */}}
   labels:
     {{- include "batch-job.labels" $root | nindent 4 }}
 spec:
   replicas: {{ .replicaCount }} 
   selector:
     matchLabels:
-      app: {{ include "batch-job.name" $root }}
+      app: {{ .name }} {{/* app: {{ include "batch-job.name" $root }} */}}
   template:
     metadata:
       labels:
-        app: {{ include "batch-job.name" $root }}
+        app: {{ .name }} {{/* app: {{ include "batch-job.name" $root }} */}}
     spec:
       containers:
         - name: {{ .name }}
@@ -35,9 +35,9 @@ spec:
             - containerPort: {{ .service.port }}
           envFrom:
             - configMapRef:
-                name: {{ .name }}-config
+                name: {{ $root.Release.Name }}-{{ .name }}-config
             - secretRef:
-                name: {{ .name }}-secret
+                name: {{ $root.Release.Name }}-{{ .name }}-secret
           resources:
             limits:
               memory: {{ .resources.limits.memory }}
@@ -58,7 +58,7 @@ spec:
 {{- if .configMap.enabled }}
         - name: config-volume
           configMap:
-            name: {{ .configMap.name }}
+            name: {{ $root.Release.Name }}-{{ .configMap.name }}
 {{- end }}
       restartPolicy:
         {{ .restartPolicy | default "Never" }} 

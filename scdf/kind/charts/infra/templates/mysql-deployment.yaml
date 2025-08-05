@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: mysql
-          image: {{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }}
+          image: "{{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }}"
           imagePullPolicy: {{ .Values.mysql.image.pullPolicy | default "IfNotPresent" }}
           env:
             {{- range .Values.mysql.env }}
@@ -25,12 +25,12 @@ spec:
               value: {{ .value | quote }}
             {{- end }}
           ports:
-            - containerPort: 3306
+            - containerPort: {{ .Values.mysql.service.port }} {{/* 3306 */}}
           volumeMounts:
-            - name: mysql-persistent-storage
-              mountPath: /var/lib/mysql
+            - name: mysql-storage
+              mountPath: {{ .Values.mysql.persistence.mountPath }} {{/* /var/lib/mysql */}}
       volumes:
-        - name: mysql-persistent-storage
+        - name: mysql-storage
           persistentVolumeClaim:
             claimName: mysql-pvc
 {{- end }}

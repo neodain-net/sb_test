@@ -6,18 +6,23 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control
     extraPortMappings:
-      # Grafana (30030), SCDF UI (30080), InfluxDB UI (30886), Prometheus(30550)
-      - containerPort: 30030
-        hostPort: 30030
+      # Grafana (31000), SCDF (31093), Skipper (30097), InfluxDB (31086), Prometheus(31090)
+      # Kind는 NodePort범위(30000~32767) 내에서 접근할 수 있어야 외부(로컬)에서 curl 및 브라우저 접근이 가능.
+      # Ingress Controller를 이용할 경우(예 : NGINX + TLS) 통합 라우팅하면 30000만 외부에 열고 내부적으로 라우팅할 수도 있음.
+      - containerPort: 31000 # Grafana
+        hostPort: 31000
         protocol: TCP
-      - containerPort: 30080
-        hostPort: 30080
+      - containerPort: 31090 # Prometheus
+        hostPort: 31090
         protocol: TCP
-      - containerPort: 30550
-        hostPort: 30550
+      - containerPort: 31093 # SCDF 
+        hostPort: 31093
         protocol: TCP
-      - containerPort: 30886
-        hostPort: 30886
+      - containerPort: 31086 # Influx db
+        hostPort: 31086
+        protocol: TCP
+      - containerPort: 31097 # Skipper 
+        hostPort: 31097
         protocol: TCP
   - role: worker-1
     labels:
@@ -27,6 +32,10 @@ nodes:
       - containerPort: 9091
         hostPort: 9091
         protocol: TCP
+    taints:
+      - key: "type"
+        value: "job"
+        effect: "NoSchedule"
   - role: worker-2
     labels:
       role: work-2   # work-2로 레이블 설정
@@ -35,8 +44,12 @@ nodes:
       - containerPort: 9092
         hostPort: 9092
         protocol: TCP
+    taints:
+      - key: "type"
+        value: "task"
+        effect: "NoSchedule"
 
 # 주의사항:
-# - worker 1 (job-worker): 배치 작업용 Job 10개
-# - worker 2 (task-worker): SCDF Task 10개
+# - worker-1 (job-worker): 배치 작업용 Job 10개
+# - worker-2 (task-worker): SCDF Task 10개
 # - 노드에서 작업을 구분하기 위해 labels로 worker 노드의 역할 구분

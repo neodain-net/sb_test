@@ -21,6 +21,14 @@
 # - kubectl label nodes love-cluster-worker name=oppa-love-node
 # - kubectl get nodes --show-labels
 # - kubectl label node love-cluster-worker emoji=💗
+# # 인프라 설치
+#helm install infra ./infra -f values-infra.yaml
+
+# 배치 잡(Job) 앱 배포
+#helm install job ./batch-job -f values-job.yaml
+
+# SCDF Task 앱 배포
+#helm install task ./batch-task -f values-task.yaml
 
 Release:
   Name: "default"
@@ -51,7 +59,7 @@ batchJobs:
       datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
         enabled: true
         driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://job01-datasource.default.svc.cluster.local:3306/jobdb
+        url: jdbc:mysql://job01-datasource-sub.default.svc.cluster.local:3306/jobdb
         username: user
         password: root
       influx:
@@ -64,7 +72,7 @@ batchJobs:
         - name: springProfile
           value: local 
         - name: jobCron 
-          value: "*/5 * * * *" 
+          value: "0 */5 * * *" 
           # 5분 주기 (설정순서 : 분 시 일 월 요일)
       command:     # ["java", "-jar", "/app/app.jar"]
         - "--rtm.batch.job.start=202507091730"
@@ -73,7 +81,9 @@ batchJobs:
         - "--rtm.batch.job.interval=10"
         - "--rtm.batch.job.delay=5"
       service:
-        port: 8080
+        enabled: true;                # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요)
+        type: ClusterIP               # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
+        port: 8080                    # 기본 서비스 포트
       resources:
         limits:
           cpu: 500m
@@ -92,7 +102,7 @@ batchJobs:
                   operator: In
                   values:
                     - work-1          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
-      tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
+      tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용 (kubectl taint nodes work-1 type=job:NoSchedule)
         - key: "type"                 # 노드에 taint로 설정된 key
           operator: "Equal"           # 정확히 일치하는 값일 때만 허용
           value: "job"                # 해당 값이 "job"일 경우만 이 Pod는 스케줄링 허용됨
@@ -103,20 +113,20 @@ batchJobs:
           readOnly: true              # 읽기 전용
       volumes:
         - name: config-volume
-          configMap:
-            name: batch-job-01-config    # 참조할 ConfigMap 이름
-      configMap:
+          configMap:                  # volumeMounts + volumes : application.yml 또는 application-prod.yml 등 Spring Boot 앱 설정파일을 Kubernetes ConfigMap으로 만들어서 Pod 내부에 마운트해 사용하기 위함 
+            name: batch-job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다.
+      configMap:                      # ConfigMap 만드는 방법 : kubectl create configmap batch-job-01-config --from-file=application.yml (이후, Helm에서는 configMap.name: batch-job-01-config으로 참조하면 된다)
         enabled: true
         name: batch-job-01-config
         files:
           - application.yaml
-      livenessProbe:
+      livenessProbe:                  # 앱이 살아 있는지 확인(죽었으면 자동 재 시작)
         httpGet:
-          path: /actuator/health/liveness
+          path: /actuator/health/liveness # Spring Boot actuator의 /health/liveness 앤드포인트를 사용
           port: 8080
         initialDelaySeconds: 30
         periodSeconds: 10
-      readinessProbe:
+      readinessProbe:                 # 앱이 준비됐는지 확인(준비되기 전에는 트래픽 차단)
         httpGet:
           path: /actuator/health/readiness
           port: 8080
@@ -138,7 +148,7 @@ batchJobs:
       datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
         enabled: true
         driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://job01-datasource.default.svc.cluster.local:3306/jobdb
+        url: jdbc:mysql://job02-datasource-sub.default.svc.cluster.local:3306/jobdb
         username: user
         password: root
       influx:
@@ -151,7 +161,7 @@ batchJobs:
         - name: springProfile
           value: local 
         - name: jobCron 
-          value: "* */5 * * * *" 
+          value: "0 */5 * * *" 
       command: 
         - "--rtm.batch.job.start=202507091730"
         - "--rtm.batch.job.end=202507091740"
@@ -159,6 +169,8 @@ batchJobs:
         - "--rtm.batch.job.interval=10"
         - "--rtm.batch.job.delay=5"
       service:
+        enabled: true;                # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요)
+        type: ClusterIP               # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
         port: 8081
       resources:
         limits:
@@ -220,9 +232,21 @@ batchTasks:
         pullPolicy: IfNotPresent
       restartPolicy: Never
       datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        url: jdbc:mysql://task01-datasource.default.svc.cluster.local:3306/jobdb
+        url: jdbc:mysql://task01-datasource.default.svc.cluster.local:3306/taskdb
         username: user
         password: root
+      datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+        enabled: false
+        driver_class_name: com.mysql.cj.jdbc.Driver 
+        url: jdbc:mysql://task01-datasource-sub.default.svc.cluster.local:3306/taskdb
+        username: user
+        password: root
+      influx:
+        url: http://influxdb:8086
+        logLevel: BODY
+        readTimeout: 5s
+        writeTimeout: 5s
+        connectTimeout: 5s
       arguments:
         - "--runDate=2025-07-10" 
           # task launch my-batch-task --arguments "--runData=2005-07-10" 시 
@@ -234,11 +258,11 @@ batchTasks:
         - name: TASK_EXECUTION_ID
           value: "ID0001"
         - name: task_name
-          value: "task01"
+          value: "batch_task_01"
         - name: springProfile
           value: local
         - name: jobCron
-          value: "* */5 * * * *" 
+          value: "0 */5 * * *" 
       command: 
         - "--spring.cloud.task.name=task01"
         - "--rtm.batch.job.start=202507091730"
@@ -247,6 +271,8 @@ batchTasks:
         - "--rtm.batch.job.interval=10"
         - "--rtm.batch.job.delay=5"
       service:
+        enabled: true;                # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요) 현재는 테스트 목적으로 true로 해서 테스트 해봄.
+        type: ClusterIP               # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
         port: 8090
       resources:
         limits:
@@ -323,10 +349,10 @@ mysql:
     port: 3306
     nodePort: 3307
   persistence:
-    enabled: true
+    enabled: true             # false : 디스크 사용안함(일시적인 테스트 시)
     mountPath: /var/lib/mysql
-    existingClaim: mysql-pvc
-    size: 2Gi
+    existingClaim: mysql-pvc  # 이미 클러스터에 생성된 mysql-pvc라는 PVC를 사용
+    # size: 2Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
   nodeSelector:
     role: work-1
 

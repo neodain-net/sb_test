@@ -4,18 +4,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "batch-task.fullname" $root }}
+  name: {{ $root.Release.Name }}-{{ .name }} {{/* name: {{ include "batch-task.fullname" $root }} */}}
   labels:
     {{- include "batch-task.labels" $root | nindent 4 }}
 spec:
   replicas: {{ .replicaCount }} 
   selector:
     matchLabels:
-      app: {{ include "batch-task.name" $root }}
+      app: {{ .name }} {{/* app: {{ include "batch-task.name" $root }} */}}
   template:
     metadata:
       labels:
-        app: {{ include "batch-task.name" $root }}
+        app: {{ .name }} {{/* app: {{ include "batch-task.name" $root }} */}}
     spec:
       containers:
         - name: {{ .name }}
@@ -27,7 +27,7 @@ spec:
             - name: {{ .name }}
               value: {{ .value | quote }}
 {{- end }}
-          args:
+          args: {{/* args: {{ toJson .arguments }} */}}
 {{- range .command }}
             - {{ . | quote }}
 {{- end }}
@@ -35,9 +35,9 @@ spec:
             - containerPort: {{ .service.port }}
           envFrom:
             - configMapRef:
-                name: {{ .name }}-config
+                name: {{ $root.Release.Name}}-{{ .name }}-config
             - secretRef:
-                name: {{ .name }}-secret
+                name: {{ $root.Release.Name}}-{{ .name }}-secret
           resources:
             limits:
               memory: {{ .resources.limits.memory }}
@@ -50,16 +50,29 @@ spec:
             - name: {{ .name }}
               mountPath: {{ .mountPath }}
 {{- end }}
-          livenessProbe: {{- toYaml .livenessProbe | nindent 12 }}
-          readinessProbe: {{- toYaml .readinessProbe | nindent 12 }}
+          livenessProbe: 
+            {{- toYaml .livenessProbe | nindent 12 }}
+          readinessProbe: 
+            {{- toYaml .readinessProbe | nindent 12 }}
       volumes:
 {{- if .configMap.enabled }}
         - name: config-volume 
           configMap:
-            name: {{ .configMap.name }}
+            name: {{ $root.Release.Name }}-{{ .configMap.name }}
 {{- end }}
-      restartPolicy: {{ .restartPolicy | default "Never" }}
-      nodeSelector: {{- toYaml .nodeSelector | nindent 8 }}
-      affinity: {{- toYaml .affinity | nindent 8 }}
-      tolerations: {{- toYaml .tolerations | nindent 8 }}
+      restartPolicy: 
+        {{ .restartPolicy | default "Never" }}
+      nodeSelector: 
+        {{- toYaml .nodeSelector | nindent 8 }}
+      affinity: {{/* affinity: {{- toYaml .affinity | nindent 8 }} */}}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - {{ .nodeSelector.role }}
+      tolerations: 
+        {{- toYaml .tolerations | nindent 8 }}
 {{- end }}

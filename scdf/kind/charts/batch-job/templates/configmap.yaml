@@ -5,7 +5,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $root.Release }}-{{ .name }} {{/* name: {{ include "batch-job.fullname" $root }}-{{ .name }}-config */}}
+  name: {{ $root.Release.Name }}-{{ .name }}-config {{/* name: {{ include "batch-job.fullname" $root }}-{{ .name }}-config */}}
   labels:
     {{- include "batch-job.labels" $root | nindent 4 }} 
 data:

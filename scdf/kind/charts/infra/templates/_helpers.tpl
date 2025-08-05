@@ -1,7 +1,7 @@
 # templates/_helpers.tpl
 
 {{/* Chart name */}}
-{{- define "batch-infral.name" -}}
+{{- define "batch-infra.name" -}}
 {{- .Chart.Name -}}
 {{- end }}
 
