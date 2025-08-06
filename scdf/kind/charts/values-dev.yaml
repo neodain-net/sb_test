@@ -338,21 +338,15 @@ mysql:
       value: neodain
     - name: password
       value: Kht72@eye1
-  resources:
-    limits:
-      memory: 2048Mi
-      cpu: 1000m
-    requests:
-      memory: 1024Mi
-      cpu: 500m
   service:
     port: 3306
     nodePort: 3307
   persistence:
     enabled: true             # false : 디스크 사용안함(일시적인 테스트 시)
     mountPath: /var/lib/mysql
-    existingClaim: mysql-pvc  # 이미 클러스터에 생성된 mysql-pvc라는 PVC를 사용
-    # size: 2Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
+    storageClass: standard    # standard, gp2, hostpath
+    size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
+    # existingClaim: mysql-pvc  # 이미 클러스터에 생성된 mysql-pvc라는 PVC를 사용하겠다는 의미로 사전에 mysql-pvc.yaml 등으로 정의 되어 있어야 한다.
   nodeSelector:
     role: work-1
 
@@ -377,8 +371,9 @@ mariadb:
   persistence:
     enabled: true
     mountPath: /var/lib/mysql
-    existingClaim: mariadb-pvc
-    size: 2Gi
+    storageClass: standard    # standard, gp2, hostpath
+    size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
+    # existingClaim: mariadb-pvc
   nodeSelector:
     role: work-2
 
@@ -407,8 +402,9 @@ influxdb:
   persistence:
     enabled: true
     mountPath: /var/lib/influxdb2
-    existingClaim: influxdb-pvc
-    size: 2Gi
+    storageClass: standard    # standard, gp2, hostpath
+    size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
+    # existingClaim: influxdb-pvc
   nodeSelector:
     role: control
 
@@ -424,7 +420,9 @@ grafana:
   persistence:
     enabled: true
     mountPath: /var/lib/grafana
-    existingClaim: grafana-pvc
+    storageClass: standard    # standard, gp2, hostpath
+    size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
+    # existingClaim: grafana-pvc
   dependsOn:
     - influxdb
   admin: 
@@ -463,8 +461,8 @@ prometheus:
         cpu: 250m
     persistentVolume:
       enabled: true
-      storageClass: standard
-      size: 8Gi
+      storageClass: standard # Chart가 배포될 때 자동으로 PVC를 생성. 
+      size: 1Gi
     nodeSelector:
       role: control 
 

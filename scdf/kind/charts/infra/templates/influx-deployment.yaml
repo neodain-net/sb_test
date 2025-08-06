@@ -15,11 +15,9 @@ spec:
       labels:
         app: influxdb
     spec:
-      nodeSelector:
-        node-type: control
       containers:
         - name: influxdb
-          image: {{ .Values.influxdb.image.repository }}:{{ .Values.influxdb.image.tag }}
+          image: "{{ .Values.influxdb.image.repository }}:{{ .Values.influxdb.image.tag }}"
           imagePullPolicy: {{ .Values.influxdb.image.pullPolicy | default "IfNotPresent" }}
           env:
             {{- range .Values.influxdb.env }}
@@ -30,10 +28,11 @@ spec:
             - containerPort: 8086
           volumeMounts:
             - name: influxdb-storage
-              mountPath: /var/lib/influxdb2
+              mountPath: {{ .Values.influxdb.persistence.mountPath }} {{/* /var/lib/influxdb2 */}}
       volumes:
         - name: influxdb-storage
           persistentVolumeClaim:
             claimName: influxdb-pvc
+      nodeSelector: {{- toYaml .Values.influxdb.nodeSelector | nindent 8 }}
 {{- end }}
 

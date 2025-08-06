@@ -15,11 +15,10 @@ spec:
       labels:
         app: mariadb
     spec:
-      nodeSelector:
-        node-type: work
       containers:
         - name: mariadb
-          image: {{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}
+          image: "{{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}"
+          imagePullPolicy: {{ .Values.mariadb.image.pullPolicy | default "IfNotPresent" }}
           env:
             {{- range .env }}
             - name: {{ .env.name }}
@@ -29,9 +28,10 @@ spec:
             - containerPort: 3306
           volumeMounts:
             - name: mariadb-storage
-              mountPath: /var/lib/mariadb
+              mountPath: {{ .Values.mariadb.persistence.mountPath }} {{/* /var/lib/mariadb */}}
       volumes:
         - name: mariadb-storage
           persistentVolumeClaim:
             claimName: mariadb-pvc
+      nodeSelector: {{- toYaml .Values.mariadb.nodeSelector | nindent 8 }}
 {{- end }}
