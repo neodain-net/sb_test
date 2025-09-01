@@ -1,0 +1,68 @@
+# “charts/batch-job/files/application.yaml” 
+# → ConfigMap → 볼륨 마운트 → 컨테이너 /config/application.yaml → Spring이 읽음
+# Chart 패키징 시 charts/batch-job/files/ 안의 파일은 Helm이 .Files.Get으로 읽을 수 있음.
+# 템플릿에서 그 내용을 **ConfigMap.data["application.yaml"]**로 집어넣는다.
+# 파드에 volum다s[].configMap + volumeMounts[].mountPath: /config로 마운트.
+# 컨테이너 env에 SPRING_CONFIG_ADDITIONAL_LOCATION=/config/ 를 주면
+# Spring Boot가 **/config/ 경로에 있는 application.{yml,yaml,properties}**를 추가로 자동 로딩.
+
+# 여러 파일을 넣어도 Spring은 기본적으로 application.*만 자동 로드.
+# 다른 이름(예: influx.yaml, log.yaml)을 추가로 읽히려면
+# application.yaml 안에서
+# spring.config.import=optional:file:/config/influx.yaml,optional:file:/config/log.yaml
+# 을 추가하거나, 파일명을 application-influx.yaml처럼 profile 파일로 두고, 
+# 실행 시 --spring.profiles.active=influx 등을 사용
+
+# 공공통 파일 + ENV(값만 다름) 
+# files/application.yaml 하나에 공통 구조.
+# 잡별 차이는 ENV(ConfigMap/Secret) 로 덮어쓰기.
+# 장점: 중복 없음 + 값 차등 배포 쉬움.
+# 단점: 어느 값이 파일/ENV에 있는지 팀 컨벤션이 필요
+
+# 여러 파일을 쓰고 싶을 때의 스프링 로딩 규칙(중요)
+# 자동 로드 대상: application.properties|yml|yaml
+# 다른 이름 파일은 자동 미로드 → spring.config.import로 명시해야 함.
+
+# 예시:
+
+# # /config/application.yaml
+# spring:
+#   config:
+#     import: "optional:file:/config/influx.yaml,optional:file:/config/logging.yaml"
+
+# 또는 Profile 파일:
+# /config/application-influx.yaml 준비
+# 실행 시 --spring.profiles.active=influx
+
+# “파일 마운트”가 실제로 Spring에서 읽히는 흐름 (핵심 요약)
+
+# charts/batch-job/files/application.yaml → 
+# 템플릿에서 .Files.Get으로 읽어 **ConfigMap.data["application.yaml"]**에 넣음.
+
+# Pod에 volumes.configMap + volumeMounts.mountPath: /config 로 /config/application.yaml 파일 제공.
+
+# 컨테이너 env SPRING_CONFIG_ADDITIONAL_LOCATION=/config/ 로 지정 →
+# Spring Boot가 /config의 application.yaml(및 관련 프로필 파일)을 자동 로딩.
+
+# 여러 파일을 쓰려면:
+# application.yaml 안에서 
+# spring.config.import=optional:file:/config/extra1.yaml,optional:file:/config/extra2.yaml
+# 또는 application-xxx.yaml + --spring.profiles.active=xxx
+
+spring:
+  main:
+    web-application-type: none   # 배치용(웹 안 띄움)
+  jackson:
+    default-property-inclusion: non_null
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
+
+# 필요 시 추가 파일 가져오기(여러 파일 혼용 시)
+# spring:
+#   config:
+#     import: "optional:file:/config/influx.yaml"

@@ -24,36 +24,146 @@
 # # 인프라 설치
 #helm install infra ./infra -f values-infra.yaml
 
-# 배치 잡(Job) 앱 배포
+# 배치 잡 앱 배포
 #helm install job ./batch-job -f values-job.yaml
 
 # SCDF Task 앱 배포
 #helm install task ./batch-task -f values-task.yaml
 
-Release:
-  Name: "default"
-  Service: "spring-batch"
+
+# (선택) 전역 공통 설정 – 헬퍼들이 참조할 수 있음
+# 이 설정은 모든 컴포넌트에 공통으로 적용되는 값들로,
+# 예를 들어 이미지 레지스트리, Pull Secret, Pod 어노테이션 등을 정의합니다.
+# 이 값들은 각 컴포넌트의 values.yaml에서 참조되어 사용됩니다.
+# 예를 들어, 이미지 레지스트리를 설정하면 모든 컴포넌트가 해당 레지스트리에서 이미지를 가져옵니다.
+# 예시로, 이미지 레지스트리를 사설 레지스트리로 설정하거나,
+# 이미지 Pull Secret을 지정하여 인증된 레지스트리에서 이미지를 가져올 수 있습니다.
+# 이 설정은 Helm 차트의 values.yaml 파일에서 정의되며,
+# 각 컴포넌트의 values.yaml 파일에서 참조하여 사용합니다.
+
+global:
+  podAnnotations: {}           # 모든 Pod에 공통으로 추가할 어노테이션(컴포넌트별 로컬값과 merge)
+  # imageRegistry: ""            # 사설 레지스트리 사용 시 "registry.example.com"
+  # imagePullSecrets: []         # ["regcred"] 등
+  # podAnnotations: {}           # 모든 Pod에 공통으로 추가할 어노테이션(컴포넌트별 로컬값과 merge)
+
 
 batchJobs:
   enabled: true
   jobs:
     - name: batch-job-01
-      replicaCount: 1
-      image: # neo-batch-job:0.0.1
+
+      mode: cron         # job | cron | deployment 모드 선택
+
+      image: 
         repository: neo-batch-job
-        tag: 0.0.1
+        tag: "0.0.1"
         pullPolicy: IfNotPresent
-          # Always : 매번 새 이미지 Pull (latest 태그나 개발 환경에서)
-          # IfNotPresent : 로컬에 없으면 Pull (테스트 / 배포용 개발 이미지)
-          # Never : 절대 Pull 안 함 (로컬에서 만든 이미지만 사용할 때(Kind 등)
-      restartPolicy: Never   # Job이 실패해도 자동 재시작하지 않음 (일회성 작업)
-        # 주기적인 batch job 실행 후 종료되는 경우
+        # Always : 매번 새 이미지 Pull (latest 태그나 개발 환경에서)
+        # IfNotPresent : 로컬에 없으면 Pull (테스트 / 배포용 개발 이미지)
+        # Never : 절대 Pull 안 함 (로컬에서 만든 이미지만 사용할 때 Kind 등)
+
+        # 실행 command/args는 꼭 배열로, 만일 docker build에서 dockerfile의 내용 중 ENTRYPOINT ["java","-jar","/app/app.jar"] 없이 만들어진 이미지 인 경우, 아래의 ENTRYPOINT 지정 필요.
+        # 이미지에서 ENTRYPOINT 지정 확인 : docker image inspect neo-batch-job:0.0.1 --format "Entrypoint={{json .Config.Entrypoint}} Cmd={{json .Config.Cmd}}"
+        # Kubernetes 규칙(진짜 동작)
+        # 이미지에는 두 기본값이 있을 수 있다:
+        #   - ENTRYPOINT: 기본 실행 파일
+        #   - CMD: 기본 인자(옵션)
+        # Pod/컨테이너 스펙에서:
+        # command는 이미지의 ENTRYPOINT를 덮어씌운다.
+        # args는 이미지의 CMD를 덮어씌운다. 
+
+      # command: ["java", "-jar", "/app/app.jar"] // 보통은 docker images에 ENTRYPOINT가 포함되어 있기 때문에 이 부분을 생략한다.
+      
+      args:
+        - "--spring.profiles.active=dev"
+        - "--spring.config.additional-location=/config/" # Spring batch-job이 ConfigMap으로 마운트한 설정파일 읽기
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+
+      # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료
+      env:
+        - name: SPRING_MAIN_WEB_APPLICATION_TYPE
+          value: "none"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:+ExitOnOutOfMemoryError -Xms256m -Xmx512m"
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+
+      # spring app 인 경우.
+      # env: 
+      #   - name: springProfile
+      #     value: local 
+      #   - name: jobCron 
+      #     value: "4,9,14,19,24,29,34,39,44,49,54,59 * * * *"
+
+      # 리소스 기본치
+      resources:
+        requests: { cpu: "250m", memory: "256Mi" }
+        limits:   { cpu: "500m", memory: "512Mi" }
+
+      # resources:
+      #   limits:
+      #     cpu: 500m
+      #     memory: 512Mi
+      #   requests:
+      #     cpu: 250m
+      #     memory: 256Mi
+
+      # 1회 실행 Job 전용(선택)
+      job:
+        enabled: false
+        parallelism: 1
+        completions: 1
+        backoffLimit: 1
+        activeDeadlineSeconds: 600       # 10분 상한(무한대기 방지)
+        ttlSecondsAfterFinished: 7200    # 완료 2h 후 정리
+
+      # 주기 실행 Cron 전용(선택)
+      cron:
+        enabled: true
+        schedule: "*/5 * * * *"      # mode: cron일 때만 사용.
+        # 5분 주기 (설정순서 : 분 시 일 월 요일)
+        # 동일 시간 여러 job을 실행 시 부하 발생하기 때문에 특정 시간으로 나누워 시작 시.
+        # "1,6,11,16,21,26,31,36,41,46,51,56 * * * *" 
+        # "2,7,12,17,22,27,32,37,42,47,52,57 * * * *" 
+        # "3,8,13,18,23,28,33,38,43,48,53,58 * * * *" 
+        # "4,9,14,19,24,29,34,39,44,49,54,59 * * * *" 
+
+        # */5 * * * * = 매 5분(0,5,10,15,…)
+        # 안전한 오프셋 분산(서로 시작 시각을 어긋나게):
+        # 1-59/5 * * * * → 1,6,11,16,…
+        # 2-59/5 * * * * → 2,7,12,17,…
+        # 3-59/5 * * * * → 3,8,13,18,…
+        # 4-59/5 * * * * → 4,9,14,19,…
+
+        timeZone: "Asia/Seoul"       # k8s 1.27+에서만 지원. 미만인면 지워도 됨.
+        concurrencyPolicy: "Forbid"  # 중복 실행 방지
+        startingDeadlineSeconds: 120
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 1
+
+      deployment:
+        enabled: false
+        replicaCount: 1
+        restartPolicy: Always   # Deployment의 Pod는 항상 Always. 
+        # Job/CronJob인 경우 Never/OnFailure
         # Always : 항상 재 시작 (Deployment)
         # OnFailure : 실패 시 재 시작 (Job / Pod)
         # Never : 절대 재 시작 안함 (Job / Pod)
+      
+      service:             # Job/Task는 단발성 실행이므로 보통 Service는 필요 없음. Deployment 모드로 실행하는 경우에만 Service가 필요할 수 있음.
+        enabled: false     # false 인 경우 Service는 필요 없음 (job/task는 단발성 실행이므로 통신 노출 불필요)
+        type: ClusterIP    # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능 : 마이크로서비스끼리의 통신용)
+        port: 8080         # 기본 서비스(db등) 포트로 클러스터 안에서 서비스가 노출되는 가상 포트 (이외에, targetPort : Pod 컨테이너 포트)
+        # nodePort: 30080  # NodePort는 30000 ~ 32767 범위만 허용, 생략 시 k8s에서 자동 할당. 중복 설정하면 안되는 포트번호. kind 테스트시에만 사용. 생략하여 자동할당 추천. 
+
       datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://job01-datasource.default.svc.cluster.local:3306/jobdb
+        driver_class_name: org.mariadb.jdbc.Driver
+        url: jdbc:mariadb://job01-datasource.default.svc.cluster.local:3306/jobdb
         username: user
         password: root
       datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
@@ -68,29 +178,7 @@ batchJobs:
         readTimeout: 5s
         writeTimeout: 5s
         connectTimeout: 5s
-      env: 
-        - name: springProfile
-          value: local 
-        - name: jobCron 
-          value: "0 */5 * * *" 
-          # 5분 주기 (설정순서 : 분 시 일 월 요일)
-      command:     # ["java", "-jar", "/app/app.jar"]
-        - "--rtm.batch.job.start=202507091730"
-        - "--rtm.batch.job.end=202507091740"
-        - "--rtm.batch.job.chunk=200"
-        - "--rtm.batch.job.interval=10"
-        - "--rtm.batch.job.delay=5"
-      service:
-        enabled: true;                # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요)
-        type: ClusterIP               # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
-        port: 8080                    # 기본 서비스 포트
-      resources:
-        limits:
-          cpu: 500m
-          memory: 512Mi
-        requests:
-          cpu: 250m
-          memory: 256Mi
+
       nodeSelector:                   # 해당 Pod가 배치될 Node를 label로 지정
         role: work-1                  # label key: 'role', value: 'work-1' 인 노드에만 배치
       affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
@@ -106,7 +194,8 @@ batchJobs:
         - key: "type"                 # 노드에 taint로 설정된 key
           operator: "Equal"           # 정확히 일치하는 값일 때만 허용
           value: "job"                # 해당 값이 "job"일 경우만 이 Pod는 스케줄링 허용됨
-          effect: "NotSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+          effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
       volumeMounts:
         - name: config-volume
           mountPath: /config          # 설정파일이 마운트될 경로
@@ -114,32 +203,96 @@ batchJobs:
       volumes:
         - name: config-volume
           configMap:                  # volumeMounts + volumes : application.yml 또는 application-prod.yml 등 Spring Boot 앱 설정파일을 Kubernetes ConfigMap으로 만들어서 Pod 내부에 마운트해 사용하기 위함 
-            name: batch-job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다.
+            name: batch-job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다. 클러스터에 실제 존재해야 함.
       configMap:                      # ConfigMap 만드는 방법 : kubectl create configmap batch-job-01-config --from-file=application.yml (이후, Helm에서는 configMap.name: batch-job-01-config으로 참조하면 된다)
-        enabled: true
+        enabled: true                 # false 면 Helm이 ConfigMap을 만들지 않음. true로 해야 아래 name/files 옵션이 적용됨.
         name: batch-job-01-config
-        files:
-          - application.yaml
-      livenessProbe:                  # 앱이 살아 있는지 확인(죽었으면 자동 재 시작)
-        httpGet:
-          path: /actuator/health/liveness # Spring Boot actuator의 /health/liveness 앤드포인트를 사용
-          port: 8080
-        initialDelaySeconds: 30
-        periodSeconds: 10
-      readinessProbe:                 # 앱이 준비됐는지 확인(준비되기 전에는 트래픽 차단)
-        httpGet:
-          path: /actuator/health/readiness
-          port: 8080
-        linitialDelaySeconds: 15
-        periodSeconds: 5
+        files: ["application.yaml"]
+        # - application.yaml
+        # enabled: false인 경우, 파일 마운트 안 씀. datasource/influx 등은 위 ‘env용 템플릿’이 읽어 env로 변환
+
+      # Prometheus 스크랩 설정
+      # Skipper의 Actuator 엔드포인트를 Prometheus가 스크랩
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
+
+      # Spring App 이면 HTTP 프로브 사용. Non App Spring Batch 이면 불 필요한 요소
+      # livenessProbe:                  # 앱이 살아 있는지 확인(죽었으면 자동 재 시작)
+      #   httpGet:
+      #     path: /actuator/health/liveness # Spring Boot actuator의 /health/liveness 앤드포인트를 사용
+      #     port: 8080
+      #   initialDelaySeconds: 30
+      #   periodSeconds: 10
+      # readinessProbe:                 # 앱이 준비됐는지 확인(준비되기 전에는 트래픽 차단)
+      #   httpGet:
+      #     path: /actuator/health/readiness
+      #     port: 8080
+      #   initialDelaySeconds: 15
+      #   periodSeconds: 5
 
     - name: batch-job-02
-      replicaCount: 1
+
+      mode: cron 
+
       image:
         repository: neo-batch-job
-        tag: 0.0.1
+        tag: "0.0.1"
         pullPolicy: IfNotPresent
-      restartPolicy: Never
+
+      # command: ["java", "-jar", "/app/app.jar"]
+
+      args: 
+        - "--spring.profiles.active=dev"
+        - "--spring.config.additional-location=/config/" # Spring batch-job이 ConfigMap으로 마운트한 설정파일 읽기
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+
+      # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료
+      env:
+        - name: SPRING_MAIN_WEB_APPLICATION_TYPE
+          value: "none"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:+ExitOnOutOfMemoryError -Xms256m -Xmx512m"
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+
+      # 리소스 기본치
+      resources:
+        requests: { cpu: "250m", memory: "256Mi" }
+        limits:   { cpu: "500m", memory: "512Mi" }
+
+      # Job 전용(선택)
+      job:
+        parallelism: 1
+        completions: 1
+        backoffLimit: 1
+        activeDeadlineSeconds: 680
+        ttlSecondsAfterFinished: 7200
+
+      # Cron 전용(선택)
+      cron:
+        schedule: "*/5 * * * *" 
+        timeZone: "Asia/Seoul"
+        concurrencyPolicy: "Forbid"
+        startingDeadlineSeconds: 120
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 1
+
+      deployment:
+        replicaCount: 1
+        restartPolicy: Always # OnFailure : 실패 시 재 시작 (Job / Pod)
+        
+      service:
+        enabled: false    
+        type: ClusterIP 
+        port: 8081
+        # nodePort: 30081
+
       datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
         driver_class_name: com.mysql.cj.jdbc.Driver 
         url: jdbc:mysql://job02-datasource.default.svc.cluster.local:3306/jobdb
@@ -157,30 +310,10 @@ batchJobs:
         readTimeout: 5s
         writeTimeout: 5s
         connectTimeout: 5s
-      env: 
-        - name: springProfile
-          value: local 
-        - name: jobCron 
-          value: "0 */5 * * *" 
-      command: 
-        - "--rtm.batch.job.start=202507091730"
-        - "--rtm.batch.job.end=202507091740"
-        - "--rtm.batch.job.chunk=200"
-        - "--rtm.batch.job.interval=10"
-        - "--rtm.batch.job.delay=5"
-      service:
-        enabled: true;                # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요)
-        type: ClusterIP               # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
-        port: 8081
-      resources:
-        limits:
-          cpu: 500m
-          memory: 512Mi
-        requests:
-          cpu: 250m
-          memory: 256Mi
+
       nodeSelector:
         role: work-1
+
       affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -194,7 +327,8 @@ batchJobs:
         - key: "type"                 # 노드에 taint로 설정된 key
           operator: "Equal"           # 정확히 일치하는 값일 때만 허용
           value: "job"                # 해당 값이 "job"일 경우만 이 Pod는 스케줄링 허용됨
-          effect: "NotSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+          effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
       volumeMounts:
         - name: config-volume
           mountPath: /config          # 설정파일이 마운트될 경로
@@ -206,33 +340,105 @@ batchJobs:
       configMap:
         enabled: true
         name: batch-job-02-config
-        files:
-          - application.yaml
-      livenessProbe:
-        httpGet:
-          path: /actuator/health/liveness
-          port: 8080
-        initialDelaySeconds: 30
-        periodSeconds: 10
-      readinessProbe:
-        httpGet:
-          path: /actuator/health/readiness
-          port: 8080
-        linitialDelaySeconds: 15
-        periodSeconds: 5
+        files: ["application.yaml"]
+
+      # Prometheus 스크랩 설정
+      # Skipper의 Actuator 엔드포인트를 Prometheus가 스크랩
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
+
+      # files:
+      #   - application.yaml
+      # livenessProbe:
+      #   httpGet:
+      #     path: /actuator/health/liveness
+      #     port: 8080
+      #   initialDelaySeconds: 30
+      #   periodSeconds: 10
+      # readinessProbe:
+      #   httpGet:
+      #     path: /actuator/health/readiness
+      #     port: 8080
+      #   initialDelaySeconds: 15
+      #   periodSeconds: 5
 
 batchTasks:
   enabled: true
   tasks:
     - name: batch-task-01
-      replicaCount: 1
+      mode: cron
+
       image:
         repository: neo-batch-task
-        tag: 0.0.1
+        tag: "0.0.1"
         pullPolicy: IfNotPresent
-      restartPolicy: Never
+
+      # command: ["java", "-jar", "/app/app.jar"]
+
+      args:
+        - "--spring.cloud.task.name=task01"
+        - "--spring.config.additional-location=/config/" # Spring batch-task가 ConfigMap으로 마운트한 설정파일 읽기
+        - "--rtm.batch.job.start=202507091730"
+        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.chunk=200"
+        - "--rtm.batch.job.interval=10"
+        - "--rtm.batch.job.delay=5"
+
+      env:
+        - name: SPRING_MAIN_WEB_APPLICATION_TYPE
+          value: "none"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:+ExitOnOutOfMemoryError -Xms256m -Xmx512m"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "local"
+        - name: TASK_EXECUTION_ID
+          value: "ID0001"
+        - name: task_name
+          value: "batch_task_01"
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+
+      # 리소스 기본치
+      resources:
+        requests: { cpu: "250m", memory: "256Mi" }
+        limits:   { cpu: "500m", memory: "512Mi" }
+
+      # Job 전용(선택)
+      job:
+        enabled: false
+        parallelism: 1
+        completions: 1
+        backoffLimit: 1
+        activeDeadlineSeconds: 680
+        ttlSecondsAfterFinished: 7200
+
+      # Cron 전용(선택)
+      cron:
+        enabled: true
+        schedule: "*/5 * * * *"  # 5분 주기 (설정순서 : 분 시 일 월 요일)
+        timeZone: "Asia/Seoul"
+        concurrencyPolicy: "Forbid"
+        startingDeadlineSeconds: 120
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 1
+
+      # Deployment 전용(선택)
+      deployment:
+        enabled: false
+        replicaCount: 1
+        restartPolicy: Always   # Job이 실패해도 자동 재시작하지 않음 (일회성 작업)
+        
+      service:
+        enabled: false    # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요) 현재는 테스트 목적으로 true로 해서 테스트 해봄.
+        type: ClusterIP   # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
+        port: 8090
+        # nodePort: 30090   # NodePort는 30000 ~ 32767 범위만 허용
+
       datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        url: jdbc:mysql://task01-datasource.default.svc.cluster.local:3306/taskdb
+        driver_class_name: org.mariadb.jdbc.Driver
+        url: jdbc:mariadb://task01-datasource.default.svc.cluster.local:3306/taskdb
         username: user
         password: root
       datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
@@ -247,40 +453,13 @@ batchTasks:
         readTimeout: 5s
         writeTimeout: 5s
         connectTimeout: 5s
+
       arguments:
         - "--runDate=2025-07-10" 
           # task launch my-batch-task --arguments "--runData=2005-07-10" 시 
           # spring.batch.job.enabled=true 일 경우, 자동으로 JobParameter로 인식
           # JobLauncherApplicationRunner가 자동 실행
-      env:
-        - name: SPRING_PROFILES_ACTIVE
-          value: "local"
-        - name: TASK_EXECUTION_ID
-          value: "ID0001"
-        - name: task_name
-          value: "batch_task_01"
-        - name: springProfile
-          value: local
-        - name: jobCron
-          value: "0 */5 * * *" 
-      command: 
-        - "--spring.cloud.task.name=task01"
-        - "--rtm.batch.job.start=202507091730"
-        - "--rtm.batch.job.end=202507091740"
-        - "--rtm.batch.job.chunk=200"
-        - "--rtm.batch.job.interval=10"
-        - "--rtm.batch.job.delay=5"
-      service:
-        enabled: true;                # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요) 현재는 테스트 목적으로 true로 해서 테스트 해봄.
-        type: ClusterIP               # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
-        port: 8090
-      resources:
-        limits:
-          cpu: 500m
-          memory: 512Mi
-        requests:
-          cpu: 250m
-          memory: 256Mi
+
       nodeSelector:
         role: work-2
       affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
@@ -296,7 +475,8 @@ batchTasks:
         - key: "type"                 # 노드에 taint로 설정된 key
           operator: "Equal"           # 정확히 일치하는 값일 때만 허용
           value: "task"                # 해당 값이 "task"일 경우만 이 Pod는 스케줄링 허용됨
-          effect: "NotSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+          effect: "NoSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
       volumeMounts:
         - name: config-volume
           mountPath: /config          # 설정파일이 마운트될 경로
@@ -308,27 +488,40 @@ batchTasks:
       configMap:
         enabled: true
         name: batch-task-01-config
-        files:
-          - application.yaml
-      livenessProbe:
-        httpGet:
-          path: /actuator/health/liveness
-          port: 8080
-        initialDelaySeconds: 30
-        periodSeconds: 10
-      readinessProbe:
-        httpGet:
-          path: /actuator/health/readiness
-          port: 8080
-        linitialDelaySeconds: 15
-        periodSeconds: 5
+        files : ["application.yaml"]
 
+      # Prometheus 스크랩 설정
+      # Skipper의 Actuator 엔드포인트를 Prometheus가 스크랩
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
+
+      # livenessProbe:
+      #   httpGet:
+      #     path: /actuator/health/liveness
+      #     port: 8080
+      #   initialDelaySeconds: 30
+      #   periodSeconds: 10
+      # readinessProbe:
+      #   httpGet:
+      #     path: /actuator/health/readiness
+      #     port: 8080
+      #   linitialDelaySeconds: 15
+      #   periodSeconds: 5
+
+
+# =========================
+# MySQL
+# =========================
 mysql:
   enabled: true
+
   image:
     repository: mysql
     tag: "8.0"
     pullPolicy: IfNotPresent
+
   env:
     - name: rootPassword
       value: root
@@ -338,9 +531,12 @@ mysql:
       value: neodain
     - name: password
       value: Kht72@eye1
+
   service:
+    type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
     port: 3306
-    nodePort: 3307
+    nodePort: 30306
+
   persistence:
     enabled: true             # false : 디스크 사용안함(일시적인 테스트 시)
     mountPath: /var/lib/mysql
@@ -350,12 +546,43 @@ mysql:
   nodeSelector:
     role: work-1
 
+  # 템플릿에서 merge 가능(없으면 무시)
+  podAnnotations: {}
+
+  # (선택) 리소스 기본값 – 템플릿은 없어도 동작하지만 운영 권장
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+  # (선택) 스케줄링 설정
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: role
+              operator: In
+              values:
+                - work-1          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함 
+
+  tolerations:
+    - key: "role"                 # 노드에 taint로 설정된 key
+      operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+      value: "work-1"             # 해당 값이 "work-1"일 경우만 이 Pod는 스케줄링 허용됨
+      effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
+
+# =========================
+# MariaDB
+# =========================
 mariadb:
   enabled: true
+
   image:
     repository: mariadb
     tag: "10"
     pullPolicy: IfNotPresent
+
   env:
     - name: rootPassword
       value: root
@@ -365,24 +592,56 @@ mariadb:
       value: neodain
     - name: password
       value: Kht72@eye1
+
   service:
+    type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
     port: 3306
-    nodePort: 3308
+    nodePort: 30307
+
   persistence:
     enabled: true
     mountPath: /var/lib/mysql
     storageClass: standard    # standard, gp2, hostpath
     size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
     # existingClaim: mariadb-pvc
+
   nodeSelector:
     role: work-2
 
+  podAnnotations: {}
+
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: role
+              operator: In
+              values:
+                - work-2          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함 
+
+  tolerations:
+    - key: "role"                 # 노드에 taint로 설정된 key
+      operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+      value: "work-2"             # 해당 값이 "work-2"일 경우만 이 Pod는 스케줄링 허용됨
+      effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨 
+
+
+# =========================
+# InfluxDB(v2)
+# =========================
 influxdb:
   enabled: true
+
   image:
     repository: influxdb
-    tag: latest
+    tag: "2.7.12" 
     pullPolicy: IfNotPresent
+
   env:
     - name: DOCKER_INFLUXDB_INIT_MODE
       value: setup
@@ -396,146 +655,510 @@ influxdb:
       value: neodain
     - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
       value: xxxxxxxxxxxxxxxx 
+
   service:
+    type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
     port: 8086
-    nodePort: 8087
+    nodePort: 30086
+
   persistence:
     enabled: true
     mountPath: /var/lib/influxdb2
     storageClass: standard    # standard, gp2, hostpath
     size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
     # existingClaim: influxdb-pvc
+
   nodeSelector:
     role: control
 
+  podAnnotations: {}
+
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+  affinity: 
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: role
+              operator: In
+              values:
+                - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+
+  tolerations:
+    - key: "role"                 # 노드에 taint로 설정된 key
+      operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+      value: "control"            # 해당 값이 "control"일 경우만 이 Pod는 스케줄링 허용됨
+      effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨 
+
+
+# =========================
+# Grafana
+# =========================
 grafana:
   enabled: true
+  replicaCount: 1            # Grafana는 단일 인스턴스로 운영
   image:
     repository: grafana/grafana
-    tag: latest
+    tag: "12.1.1" 
     pullPolicy: IfNotPresent
+
   service:
+    type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
     port: 3000
-    nodePort: 3001
-  persistence:
+    nodePort: 31000
+
+  persistence:                # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
     enabled: true
     mountPath: /var/lib/grafana
     storageClass: standard    # standard, gp2, hostpath
-    size: 1Gi                 # persistence.enabled: true, storageClass, size 설정 : PVC를 Helm Chart 안에서 동적으로 생성
-    # existingClaim: grafana-pvc
-  dependsOn:
-    - influxdb
+    size: 1Gi                 
+
   admin: 
-    # existingSecret: grafana-admin-secret
+    existingSecret: grafana-admin-secret   # 이 방식 권장
     user: admin
     password: admin
-  nodeSelector:
-    role: control
+
+  nodeSelector: { role: control }
+
+  # Grafana의 Pod에 추가할 어노테이션(없으면 무시)
+  podAnnotations: {}
+    
+  # (선택) 리소스 – 운영 권장
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: role
+              operator: In
+              values:
+                - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+
+  tolerations:
+    - key: "role"                 # 노드에 taint로 설정된 key
+      operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+      value: "control"            # 해당 값이 "control"일 경우만 이 Pod는 스케줄링 허용됨
+      effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
+  # 데이터소스 프로비저닝 (InfluxDB v2 / Prometheus)
+  # Grafana는 기본으론 “빈 상태”로 뜨고, UI에서 수동으로 Prometheus/InfluxDB 같은 데이터소스를 등록해야 됨.
+  # 하지만, 프로비저닝을 통해 자동으로 데이터소스를 등록할 수 있음.
+  # 프로비저닝은 Grafana가 시작할 때 자동으로 데이터소스를 등록
+  # datasources.yaml은 그 작업을 자동화하는 설정 파일.
+  # 이 파일은 Helm 차트의 values.yaml에서 설정할 수 있음.
+  # Helm 차트에서 이 파일을 /etc/grafana/provisioning/datasources/ 경로에 넣어주면,
+  # Grafana가 시작할 때 /etc/grafana/provisioning/datasources/*.yaml을 읽고 데이터소스를 만들어 준다.
   datasources:
     datasources.yaml:
-      apiVersion: 1
+      apiVersion: 1                # 고정
       datasources:
-        - name: Prometheus
-          type: prometheus
-          url: http://prometheus-server
-          access: proxy
-          isDefault: true
+        - name: Prometheus         # 화면에 보일 이름
+          type: prometheus         # 데이터소스 타입
+          access: proxy            # Grafana가 프록시로 호출(일반적)
+          url: http://prometheus-server:9090   # 클러스터 내부 SVC 주소
+          isDefault: true          # 기본 데이터소스로 설정(하나만 true)
+          # editable: false        # (선택) UI에서 수정 금지
         - name: InfluxDB
           type: influxdb
-          url: http://influxdb:8086
           access: proxy
-          database: mybucket
+          url: http://influxdb:8086
+          jsonData:
+            version: 2             # InfluxDB v2 사용
+            organization: neodain
+            defaultBucket: neodain
+          secureJsonData:
+            token: ${INFLUX_TOKEN} # ENV로 주입된 토큰 참조
 
+  # 환경변수로 InfluxDB 토큰 설정
+  env:
+    - name: INFLUX_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: influxdb-auth
+          key: token
+
+  # (선택) 대시보드 자동 프로비저닝
+  dashboardsProvider:
+    enabled: true
+    configMaps:
+      - scdf-monitoring-dashboards  # ConfigMap에 json 넣어두면 자동 로드
+
+  # (선택) Grafana의 기본 대시보드 설정
+  # dashboardProviders:
+  #   dashboardproviders.yaml:
+  #     apiVersion: 1
+  #     providers:
+  #       - name: 'default'
+  #         orgId: 1
+  #         folder: ''
+  #         type: file
+  #         disableDeletion: false
+  #         editable: true
+  #         options:
+
+
+# =========================
+# Prometheus
+# =========================
 prometheus:
   enabled: true
+  replicaCount: 1            # Prometheus는 단일 인스턴스로 운영         
   image:
     repository: bitnami/prometheus 
-    tag: latest
+    tag: "3.5.0" 
+
   server:
+
+    # 템플릿에서 ConfigMap(prometheus.yml)에 반영됨
+    global:
+      scrape_interval: "15s"        # 추가: 템플릿에서 참조 → 기본 제공
+      evaluation_interval: "15s"    # 추가: 템플릿에서 참조 → 기본 제공
+
     resources:
-      requests:
-        memory: 256Mi
-        cpu: 100m
-      limits:
-        memory: 512Mi
-        cpu: 250m
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 1Gi }
+
     persistentVolume:
       enabled: true
-      storageClass: standard # Chart가 배포될 때 자동으로 PVC를 생성. 
-      size: 1Gi
-    nodeSelector:
-      role: control 
+      storageClass: standard
+      size: 10Gi
+
+    # 보존기간/크기 제한 (템플릿 args에 주입)
+    extraFlags:
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=8GB
+
+    nodeSelector: { role: control }
+
+    # (선택) 서비스 타입 – 템플릿에서 dig로 조회 (미지정 시 ClusterIP)
+    service:
+      port: 9090
+      type: ClusterIP
+      # nodePort: 32090   # NodePort는 30000 ~ 32767 범위만 허용, 생략 시 k8s에서 자동 할당. 
+  
+      # nodePort: 30090
+
+    # (선택) 파드 어노테이션 추가 지점(없으면 무시)
+    podAnnotations: {}
+    affinity: {}
+    tolerations: []
+
+    # SCDF/Skipper/배치앱 스크랩 설정(Actuator /actuator/prometheus)
+    extraScrapeConfigs:
+      - job_name: 'scdf-server'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            regex: true
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.*)
+            replacement: $1
+      - job_name: 'spring-boot-apps'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            regex: true
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
 
 
-# ✨ SCDF 관련 설정
+# =========================
+# SCDF (Server + Skipper)
+# =========================
 scdf:
   enabled: true
-  image:
-    repository: bitnami/spring-cloud-dataflow 
-    tag: 2.11.5
-    pullPolicy: IfNotPresent
   server:
+    replicaCount: 1            # SCDF 서버는 단일 인스턴스로 운영
+    image:
+      repository: "bitnami/spring-cloud-dataflow"
+      tag: "2.11.5"
+      pullPolicy: IfNotPresent
+
     service:
-      type: NodePort 
-      port: 31000 
-    resource:
-      limits:
-        memory: 2048Mi
-        cpu: 1000m
-      requests:
-        memory: 1024Mi
-        cpu: 500m
-    nodeSelector:
-      role: control
+      type: NodePort      # NodePort : 외부에서 접근 가능하도록 노출, 운영은 Ingress로 노출    
+      port: 8080 
+      nodePort: 32080
+
+    resources:
+      requests: { cpu: 500m, memory: 1024Mi }
+      limits:   { cpu: "1",  memory: 2048Mi }
+
+    # 내장 DB 사용 여부
+    # mariadb.enabled: true인 경우, 내부 DB를 사용하고 외부 DB는 비활성화
     mariadb:
-      enabled: false                            # 내부 mariadb 비 활성화
+      enabled: false 
+
+    # 외부 DB 사용 여부 (SCDF 서버의 메타데이터 저장용)
     externalDatabase:    
       host: mariadb.default.svc.cluster.local   # DNS 이름:<service-name>.<namespace>.svc.cluster.local
       port: 3306
-      database: demo
       user: neodain
       password: Kht72@eye1
       database: demo
+      # existingSecret: scdf-db-secret   # ← Secret로 관리 시 활성화 (keys: mariadb-password 등 차트 스키마에 맞춰)
+
+    # JVM/Actuator/보안/프로브 강화
+    extraEnvVars:
+      - name: JAVA_TOOL_OPTIONS
+        value: >-
+          -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0
+          -Dserver.forward-headers-strategy=native
+      - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+        value: "health,info,metrics,prometheus"
+      - name: MANAGEMENT_METRICS_TAGS_APPLICATION
+        value: "scdf-server"
+
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 20
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 6
+
+    nodeSelector: { role: control }
+
+    podSecurityContext:
+      enabled: true
+      runAsNonRoot: true
+      fsGroup: 1001
+
+    containerSecurityContext: 
+      enabled: true
+      runAsUser: 1001
+      allowPrivilegeEscalation: true
+      readOnlyRootFilesystem: true
+
+    # Prometheus 스크랩 설정
+    # SCDF 서버의 Actuator 엔드포인트를 Prometheus가 스크랩
+    podAnnotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: "/actuator/prometheus"
+      prometheus.io/port: "8080"
+    
+    affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+              - key: role
+                operator: In
+                values:
+                  - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+    
+    tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
+      - key: "type"                 # 노드에 taint로 설정된 key  
+        operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+        value: "scdf"               # 해당 값이 "scdf"일 경우만 이 Pod는 스케줄링 허용됨
+        effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
+
   skipper:
     enabled: true
+
+    replicaCount: 1            # Skipper 서버는 단일 인스턴스로 운영
+    # Skipper는 SCDF의 배포/배치 관리 서버 역할
+    # Skipper는 SCDF 서버와 별도로 운영되며, 배포/배치 작업을 처리한다.
+
     image:
       repository: bitnami/spring-cloud-skipper
-      tag: 2.11.5
+      tag: "2.11.5"
       pullPolicy: IfNotPresent
+
     service:
       type: NodePort
-      nodePort: 31080
-    resource:
-      limits:
-        memory: 1024Mi
-        cpu: 500m
-      requests:
-        memory: 512Mi
-        cpu: 250m
-    nodeSelector:
-      role: control
-  dataflow:
-    server:
-      database:
-        type: mariadb
-  config:
-    spring:
-      datasource:
-        url: jdbc:mariadb://mariadb.default.svc.cluster.local:3306/scdf_meta
-        username: scdf
-        password: scdfpass
-        driverClassName: org.mariadb.jdbc.Driver
-      cloud:
-        dataflow:
-          task:
-            platform:
-              kubernetes:
-                accounts:
-                  default:
-                    namespace: default
-                    imagePullPolicy: IfNotPresent
+      port: 8080
+      nodePort: 32081
+
+    resources:
+      requests: { cpu: 250m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 1024Mi } 
+
+    # Skipper도 외부 DB 분리 권장
+    externalDatabase:
+      host: mariadb.default.svc.cluster.local
+      port: 3306
+      user: neodain 
+      password: Kht72@eye1 
+      database: skipper_meta
+      # existingSecret: skipper-db-secret
+
+    extraEnvVars:
+      - name: JAVA_TOOL_OPTIONS
+        value: >-
+          -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0
+      - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+        value: "health,info,metrics,prometheus"
+      - name: MANAGEMENT_METRICS_TAGS_APPLICATION
+        value: "skipper"
+
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 20
+      periodSeconds: 5
+
+    nodeSelector: { role: control }
+
+    podSecurityContext:
+      enabled: true
+      runAsNonRoot: true
+      fsGroup: "1001"
+
+    containerSecurityContext:
+      enabled: true
+      runAsUser: "1001"
+      allowPrivilegeEscalation: false
+
+    # Prometheus 스크랩 설정
+    # Skipper의 Actuator 엔드포인트를 Prometheus가 스크랩
+    podAnnotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: "/actuator/prometheus"
+      prometheus.io/port: "8080"
+
+    affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+              - key: role
+                operator: In
+                values:
+                  - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
+
+    tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
+      - key: "type"                 # 노드에 taint로 설정된 key
+        operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+        value: "skipper"            # 해당 값이 "skipper"일 경우만 이 Pod는 스케줄링 허용됨
+        effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+
+  # --- SCDF 기능 플래그 ---
   features:
     streaming:
       enabled: false
     rabbitmq:
       enabled: false
+
+
+# Spring Cloud Data Flow Task 플랫폼 설정 
+# Kubernetes에서 Task 앱을 실행하기 위한 계정 설정 
+# 이 설정은 SCDF 서버의 Task 플랫폼 계정 관리에서 사용됨
+# 사용법 (실행시점):
+# SCDF UI: Task 실행/스케줄 만들 때 “Platform” 드롭다운에서 계정 선택
+# SCDF Shell/HTTP: platformName 지정 (계정 이름으로 실행)
+# 예) Shell : task launch my-task --platformName default --name my-task-instance  # default 계정으로 실행
+# task launch --name batch-task-01 --platformName work-2 # work-2 계정으로 실행
+# 
+# 작업 전용 노드(work-2)로 보내고 싶으면, 해당 노드에 label과 taint 설정 필요
+# 작업 전용 노드(work-2) 설정 예시:
+# kubectl label node work-2 role=work-2
+# kubectl taint node work-2 type=task:NoSchedule
+# kubectl get nodes --show-labels
+
+# SCDF에서 TASK 실행
+# 생성된 Task 앱을 실행하려면 SCDF UI 또는 Shell을 사용하여 실행할 수 있다.
+# 예시:
+# scdf:> task launch --name batch-task-01 --platformName default
+# scdf:> task launch --name batch-task-01 --platformName work-2
+# scdf:> task launch --name batch-task-01 --platformName default --arguments "--runDate=2025-07-10" 
+# scdf:> task launch --name batch-task-01 --platformName work-2 --arguments "--runDate=2025-07-10"
+# scdf:> task schedule create --name my-schedule --definition "batch-task-01 --platformName default" --crontab "0 0 * * *" --platformName default
+# 생성된 Job/CronJob은 Kubernetes에서 관리되며, SCDF UI 또는 Shell에서 상태를 모니터링할 수 있다.
+# 생성된 Job/Task 이름 확인 방법:
+# kubectl get jobs --namespace scdf-server  
+# kubectl get cronjobs --namespace scdf-server
+# kubectl get pods --namespace scdf-server
+# kubectl get tasks --namespace scdf-server
+# kubectl get jobs -n scdf-server -o wide
+# kubectl get jobs -n default -o wide
+# kubectl get jobs -n work-2 -o wide
+# Job 스펙 확인 방법:
+# kubectl describe job batch-job-01 --namespace scdf-server 
+# kubectl describe cronjob batch-job-02 --namespace scdf-server
+# kubectl get job batch-job-01 --namespace scdf-server -o yaml
+# kubectl get cronjob batch-job-02 --namespace scdf-server -o yaml
+# kubectl get job batch-job-01 -n default -o yaml
+
+
+# =========================
+# SCDF Task Platform (ConfigMap: application.yaml 로 주입됨)
+# =========================
+config:
+  spring:
+    cloud:
+      dataflow:
+        task:
+          platform:
+            kubernetes:
+              accounts:
+
+                # 기본 계정: 개발/공용
+                default:
+                  namespace: default
+                  imagePullPolicy: IfNotPresent
+                  entryPointStyle: shell
+                  requests:
+                    cpu: 200m
+                    memory: 512Mi
+                  limits:
+                    cpu: "1"
+                    memory: 1024Mi
+                  backoffLimit: 1
+                  ttlSecondsAfterFinished: 7200
+                  environmentVariables: "SPRING_PROFILES_ACTIVE=dev"
+                  podAnnotations:
+                    prometheus.io/scrape: "true"
+                    prometheus.io/path: "/actuator/prometheus"
+                    prometheus.io/port: "8080"
+
+                # 작업 전용 노드로 보내고 싶은 계정(예: work-2)
+                work-2:
+                  namespace: default
+                  imagePullPolicy: IfNotPresent
+                  entryPointStyle: shell
+                  requests:
+                    cpu: 500m
+                    memory: 1024Mi
+                  limits:
+                    cpu: "2"
+                    memory: 2048Mi
+                  nodeSelector:
+                    role: work-2
+                  tolerations:
+                    - key: "type"
+                      operator: "Equal"
+                      value: "task"
+                      effect: "NoSchedule"
+                  backoffLimit: 1
+                  ttlSecondsAfterFinished: 7200
+                  environmentVariables: "SPRING_PROFILES_ACTIVE=dev"
+                  podAnnotations:
+                    prometheus.io/scrape: "true"
+                    prometheus.io/path: "/actuator/prometheus"
+                    prometheus.io/port: "8080"

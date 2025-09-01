@@ -1,0 +1,57 @@
+{{- /* charts/batch-task/templates/configmap-file.yaml */ -}}
+{{- $root := . -}}
+{{- range .Values.batchTasks.tasks }}
+{{- if and .configMap .configMap.enabled .configMap.files }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .configMap.name | default (printf "%s-config" (include "batch-task.resname" (dict "root" $root "name" .name))) }}
+  labels:
+    {{- include "batch-task.labels" $root | nindent 4 }}
+data:
+{{- range $file := .configMap.files }}
+  {{ $file }}: |-
+{{- $path := printf "files/%s" $file -}}
+{{- $content := $.Files.Get $path | default "" -}}
+{{- if eq $content "" }}
+    # missing: {{ $path }}
+{{- else }}
+{{- $content | nindent 4 }}
+{{- end }}
+{{- end }}
+---
+{{- end }}
+{{- end }}
+
+{{/*
+{{- $root := . -}}
+{{- range .Values.batchTasks.tasks }}
+{{- $res := include "batch-task.resname" (dict "root" $root "name" .name) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $res }}-config
+data:
+  application.yaml: |-
+    spring:
+      datasource:
+        driver-class-name: {{ .datasource.driver_class_name | quote }}
+        url: {{ .datasource.url | quote }}
+        username: {{ .datasource.username | quote }}
+    {{- if .datasource_sub.enabled }}
+    app:
+      datasource-sub:
+        driver-class-name: {{ .datasource_sub.driver_class_name | quote }}
+        url: {{ .datasource_sub.url | quote }}
+        username: {{ .datasource_sub.username | quote }}
+    {{- end }}
+    app:
+      influx:
+        url: {{ .influx.url | quote }}
+        logLevel: {{ .influx.logLevel | quote }}
+        readTimeout: {{ .influx.readTimeout | quote }}
+        writeTimeout: {{ .influx.writeTimeout | quote }}
+        connectTimeout: {{ .influx.connectTimeout | quote }}
+---
+{{- end }}
+*/}}

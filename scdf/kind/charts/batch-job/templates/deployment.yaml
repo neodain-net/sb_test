@@ -1,78 +1,124 @@
 ## templates/deployment.yaml (공통 템플릿) 
 ## 10개의 batch job을 루프를 통해 자동 Deploy 한다
+## 따로, job, CronJob 템플릿을 만들지 않고, Deployment로 통합할 경우 사용.
+## Deployment는 항상 Pod를 기동시키므로, 배치 작업이 끝나도 Pod가 살아있음.
+## 배치 작업이 끝나면, Pod가 살아있는 게 싫으면, job, CronJob 템플릿을 별도로 만들어서 사용.
+
 {{- $root := . }}
 {{- range .Values.batchJobs.jobs }} # values.yaml의 values를 참조(.Values)
+{{- if or (eq .mode "deployment") .deployment.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $root.Release.Name }}-{{ .name }} {{/* name: {{ include "batch-job.fullname" $root }} */}}
+  name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}
   labels:
     {{- include "batch-job.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
+  annotations:
+    checksum/config: {{ include (print $.Template.BasePath "/configmap-file.yaml") . | sha256sum }}
+    checksum/env:    {{ include (print $.Template.BasePath "/configmap-env.yaml")  . | sha256sum }}
+    checksum/secret: {{ include (print $.Template.BasePath "/secret-env.yaml")     . | sha256sum }}
+    # 파일/시크릿이 바뀌면 파드가 자동으로 교체
+    # 이러면 application.yaml/env/비밀이 바뀔 때마다 파드가 새로 기동됨.
 spec:
-  replicas: {{ .replicaCount }} 
+  replicas: {{ .replicaCount | default 1 }} 
   selector:
     matchLabels:
-      app: {{ .name }} {{/* app: {{ include "batch-job.name" $root }} */}}
+      {{- include "batch-job.labels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ .name }}
   template:
     metadata:
       labels:
-        app: {{ .name }} {{/* app: {{ include "batch-job.name" $root }} */}}
+        {{- include "batch-job.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ .name }}
+      {{- with .podAnnotations }} # podAnnotations가 있을 경우, 해당 배열을 출력한다.
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       containers:
         - name: {{ .name }}
           image: "{{ .image.repository }}:{{ .image.tag }}"
-          imagePullPolicy: {{ .pullPolicy | default "IfNotPresent" }}
-          env:
-{{- range .env }}
-            - name: {{ .name }}
-              value: {{ .value | quote }}
-{{- end }}
+          imagePullPolicy: {{ .image.pullPolicy | default "IfNotPresent" }}
+
+          {{- with .command }}   # // with를 사용할 경우, command 체크 후 내용 출력.
+          command: {{ toJson . }}
+          {{- end }}
+
+          {{- with .args }}
           args:
-{{- range .command }}
-            - {{ . | quote }}
-{{- end }}
-          ports:
-            - containerPort: {{ .service.port }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
           envFrom:
             - configMapRef:
-                name: {{ $root.Release.Name }}-{{ .name }}-config
+                name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}-config
             - secretRef:
-                name: {{ $root.Release.Name }}-{{ .name }}-secret
+                name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}-secret
+                optional: true 
+                {{/* # Secret 없을 때도 기동되도록 완충 */}}
+
+          {{- with .env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .resources }}
           resources:
-            limits:
-              memory: {{ .resources.limits.memory }}
-              cpu: {{ .resources.limits.cpu }}
             requests:
-              memory: {{ .resources.requests.memory }}
-              cpu: {{ .resources.requests.cpu }}
+              cpu: {{ .requests.cpu | default "100m" | quote }}
+              memory: {{ .requests.memory | default "128Mi" | quote }}
+            limits:
+              cpu: {{ .limits.cpu | default "500m" | quote }}
+              memory: {{ .limits.memory | default "512Mi" | quote }}
+          {{- end }}
+
+          {{- with .volumeMounts }}
           volumeMounts:
-{{- range .volumeMounts }}
-            - name: {{ .name }}
-              mountPath: {{ .mountPath }}
-{{- end }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .livenessProbe }}
           livenessProbe:
             {{- toYaml .livenessProbe | nindent 12 }}
+          {{- end }}
+
+          {{- with .readinessProbe }}
           readinessProbe:
             {{- toYaml .readinessProbe | nindent 12 }}
+          {{- end }}
+
+      {{- with .volumes }}   
       volumes:
-{{- if .configMap.enabled }}
+      {{/* 
+      # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 
+      # valumes 둘 다 설정 필요.
+      volumes:
+        {{- toYaml . | nindent 12 }}
+      */}}
+      volumes:
         - name: config-volume
           configMap:
-            name: {{ $root.Release.Name }}-{{ .configMap.name }}
-{{- end }}
+            name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
+      {{- end }}
+
       restartPolicy:
-        {{ .restartPolicy | default "Never" }} 
+        {{ .restartPolicy | default "Always" }} 
+
+      {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
-      affinity: {{/* affinity: {{- toYaml .affinity | nindent 8 }} */}}
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: role
-                    operator: In
-                    values:
-                      - {{ .nodeSelector.role }}
+      {{- end }}
+
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }} 
+      {{- end }}
+
+      {{- with .tolerations }}
       tolerations:
-        {{- toYaml .tolerations | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{- end }}
 {{- end }}

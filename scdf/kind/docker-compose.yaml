@@ -82,25 +82,25 @@ services:
     networks:
       - batch_network
 
-  spring-batch:
-    image: neo-batch-task:0.0.1
-    container_name: spring-batch-task 
-    command:
-      - "--rtm.batch.job.start=202507091730"
-      - "--rtm.batch.job.end=202507091740"
-      - "--rtm.batch.job.chunk=200"
-      - "--rtm.batch.job.interval=10"
-      - "--rtm.batch.job.delay=5"
-    ports:
-      - "8083:8080"
+#  spring-batch:
+#    image: neo-batch-task:0.0.1
+#    container_name: spring-batch-task 
+#    command:
+#      - "--rtm.batch.job.start=202507091730"
+#      - "--rtm.batch.job.end=202507091740"
+#      - "--rtm.batch.job.chunk=200"
+#      - "--rtm.batch.job.interval=10"
+#      - "--rtm.batch.job.delay=5"
+#    ports:
+#      - "8083:8080"
 
-    # restart: unless-stopped 
+#    # restart: unless-stopped 
 
-    depends_on:
-      - mariadb  # mariadb container
+#    depends_on:
+#      - mariadb  # mariadb container
 
-    networks:
-      - batch_network
+#    networks:
+#      - batch_network
 
 networks:
   batch_network:

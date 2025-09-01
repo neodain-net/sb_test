@@ -5,9 +5,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $root.Release.Name }}-{{ .name }}-config {{/* name: {{ include "batch-job.fullname" $root }}-{{ .name }}-config */}}
+  name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}-config }}
   labels:
-    {{- include "batch-job.labels" $root | nindent 4 }} 
+    {{- include "batch-job.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
 data:
   application.yaml: |
     application:
@@ -62,4 +63,3 @@ data:
         org.springframework.batch.item.database: DEBUG
         {{/* org.springframework.cloud.task: DEBUG */}}
 {{- end }}
-

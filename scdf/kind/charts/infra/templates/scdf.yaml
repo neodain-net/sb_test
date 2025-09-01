@@ -1,0 +1,271 @@
+{{- if .Values.scdf.enabled -}}
+{{- $server   := default (dict) .Values.scdf.server -}}
+{{- $skipper  := default (dict) .Values.scdf.skipper -}}
+{{- $cfg      := default (dict) .Values.config -}}
+{{- $srv      := default (printf "%s-scdf-server" .Release.Name) (include "batch-infra.scdf.server.name" . | default "") -}}
+{{- $skp      := default (printf "%s-scdf-skipper" .Release.Name) (include "batch-infra.scdf.skipper.name" . | default "") -}}
+{{- $checksum := (dict "server" $server "skipper" $skipper "cfg" $cfg) | toYaml | sha256sum -}}
+
+# --- SCDF Config ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-config" $srv }}
+  labels:
+    app.kubernetes.io/name: {{ $srv }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  application.yaml: |-
+{{ toYaml $cfg | nindent 4 }}
+
+---
+# --- SCDF Server ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $srv }}
+  labels:
+    app.kubernetes.io/name: {{ $srv }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ (index $server "replicaCount") | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $srv }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $srv }}
+      annotations:
+{{- $ann := merge (dict) (default (dict) (index $server "podAnnotations")) (default (dict) .Values.global.podAnnotations) -}}
+{{- $_ := set $ann "checksum/config" $checksum -}}
+{{ toYaml $ann | nindent 8 }}
+    spec:
+{{- with (index $server "nodeSelector") }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $server "affinity") }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $server "tolerations") }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $server "podSecurityContext") }}
+  {{- if .enabled }}
+      securityContext:
+        runAsNonRoot: {{ default true .runAsNonRoot }}
+        fsGroup: {{ default 1001 .fsGroup }}
+  {{- end }}
+{{- end }}
+      containers:
+        - name: scdf-server
+          image: "{{ (index $server "image" "repository") | default "ghcr.io/spring-cloud/spring-cloud-dataflow-server" }}:{{ (index $server "image" "tag") | default "latest" }}"
+          imagePullPolicy: {{ (index $server "image" "pullPolicy") | default "IfNotPresent" }}
+          env:
+{{- $db := default (dict) (index $server "externalDatabase") }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://{{ (index $db "host") }}:{{ (index $db "port") }}/{{ (index $db "database") }}"
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: "org.mariadb.jdbc.Driver"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "{{ (index $db "user") }}"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "{{ (index $db "password") }}"
+            - name: SPRING_CLOUD_SKIPPER_CLIENT_SERVER_URI
+              value: "http://{{ $skp }}:{{ (index $skipper "service" "port") | default 8080 }}"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "/config/"
+{{- range (default (list) (index $server "extraEnvVars")) }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+{{- end }}
+          ports:
+            - name: http
+              containerPort: {{ (index $server "service" "port") | default 8080 }}
+{{- with (index $server "livenessProbe") }}
+  {{- if .enabled }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: {{ .initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .periodSeconds | default 10 }}
+            timeoutSeconds: {{ .timeoutSeconds | default 5 }}
+            failureThreshold: {{ .failureThreshold | default 6 }}
+  {{- end }}
+{{- end }}
+{{- with (index $server "readinessProbe") }}
+  {{- if .enabled }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: {{ .initialDelaySeconds | default 20 }}
+            periodSeconds: {{ .periodSeconds | default 5 }}
+            timeoutSeconds: {{ .timeoutSeconds | default 3 }}
+            failureThreshold: {{ .failureThreshold | default 6 }}
+  {{- end }}
+{{- end }}
+{{- with (index $server "containerSecurityContext") }}
+  {{- if .enabled }}
+          securityContext:
+            runAsUser: {{ .runAsUser | default 1001 }}
+            allowPrivilegeEscalation: {{ .allowPrivilegeEscalation | default false }}
+            {{- if hasKey . "readOnlyRootFilesystem" }}
+            readOnlyRootFilesystem: {{ .readOnlyRootFilesystem | default false }}
+            {{- end }} 
+  {{- end }}
+{{- end }}
+{{- with (index $server "resources") }}
+          resources:
+{{ toYaml . | nindent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: scdf-config
+              mountPath: /config
+      volumes:
+        - name: scdf-config
+          configMap:
+            name: {{ printf "%s-config" $srv }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $srv }}
+  labels:
+    app.kubernetes.io/name: {{ $srv }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ (index $server "service" "type") | default "ClusterIP" }}
+  selector:
+    app.kubernetes.io/name: {{ $srv }}
+  ports:
+    - name: http
+      port: {{ (index $server "service" "port") | default 8080 }}
+      targetPort: http
+{{- if eq ((index $server "service" "type") | default "ClusterIP") "NodePort" }}
+      nodePort: {{ (index $server "service" "nodePort") | default 32080 }}
+{{- end }}
+
+{{- /* --- Skipper (옵션) --- */ -}}
+{{- if (and (hasKey .Values.scdf "skipper") (or (not (hasKey $skipper "enabled")) $skipper.enabled)) }}
+{{- $skpAnn := merge (dict) (default (dict) (index $skipper "podAnnotations")) (default (dict) .Values.global.podAnnotations) -}}
+{{- $_ := set $skpAnn "checksum/config" ((dict "skipper" $skipper) | toYaml | sha256sum) -}}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $skp }}
+  labels:
+    app.kubernetes.io/name: {{ $skp }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ (index $skipper "replicaCount") | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $skp }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $skp }}
+      annotations:
+{{ toYaml $skpAnn | nindent 8 }}
+    spec:
+{{- with (index $skipper "nodeSelector") }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $skipper "affinity") }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $skipper "tolerations") }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $skipper "podSecurityContext") }}
+  {{- if .enabled }}
+      securityContext:
+        runAsNonRoot: {{ default true .runAsNonRoot }}
+        fsGroup: {{ default 1001 .fsGroup }}
+  {{- end }}
+{{- end }}
+      containers:
+        - name: skipper
+          image: "{{ (index $skipper "image" "repository") | default "ghcr.io/spring-cloud/spring-cloud-skipper-server" }}:{{ (index $skipper "image" "tag") | default "latest" }}"
+          imagePullPolicy: {{ (index $skipper "image" "pullPolicy") | default "IfNotPresent" }}
+          env:
+{{- $dbs := default (dict) (index $skipper "externalDatabase") }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://{{ (index $dbs "host") }}:{{ (index $dbs "port") }}/{{ (index $dbs "database") }}"
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: "org.mariadb.jdbc.Driver"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "{{ (index $dbs "user") }}"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "{{ (index $dbs "password") }}"
+{{- range (default (list) (index $skipper "extraEnvVars")) }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+{{- end }}
+          ports:
+            - name: http
+              containerPort: {{ (index $skipper "service" "port") | default 8080 }}
+{{- with (index $skipper "livenessProbe") }}
+  {{- if .enabled }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: {{ .initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .periodSeconds | default 10 }}
+  {{- end }}
+{{- end }}
+{{- with (index $skipper "readinessProbe") }}
+  {{- if .enabled }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: {{ .initialDelaySeconds | default 20 }}
+            periodSeconds: {{ .periodSeconds | default 5 }}
+  {{- end }}
+{{- end }}
+{{- with (index $skipper "containerSecurityContext") }}
+  {{- if .enabled }}
+          securityContext:
+            runAsUser: {{ default 1001 .runAsUser }}
+            allowPrivilegeEscalation: {{ default false .allowPrivilegeEscalation }}
+  {{- end }}
+{{- end }}
+{{- with (index $skipper "resources") }}
+          resources:
+{{ toYaml . | nindent 12 }}
+{{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $skp }}
+  labels:
+    app.kubernetes.io/name: {{ $skp }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ (index $skipper "service" "type") | default "ClusterIP" }}
+  selector:
+    app.kubernetes.io/name: {{ $skp }}
+  ports:
+    - name: http
+      port: {{ (index $skipper "service" "port") | default 8080 }}
+      targetPort: http
+{{- if eq ((index $skipper "service" "type") | default "ClusterIP") "NodePort" }}
+      nodePort: {{ (index $skipper "service" "nodePort") | default 32081 }}
+{{- end }}
+{{- end }}{{/* skipper */}}
+{{- end }}{{/* scdf.enabled */}}

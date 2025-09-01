@@ -1,0 +1,241 @@
+batchJobs:
+  enabled: true
+
+  # _base: &jobBase : 공통 기본(앵커)
+  # &jobBase는 앵커(저장소) 이름이고, _base 키 아래의 공통 설정 블록을 저장.
+  # 나중에 *jobBase로 불러와서 재사용
+
+  _base: &jobBase
+    mode: cron
+    image: { repository: neo-batch-job, tag: "0.0.1", pullPolicy: IfNotPresent }
+    command: ["java","-jar","/app/app.jar"]
+    args:
+      - "--spring.profiles.active=dev"
+    resources:
+      requests: { cpu: "250m", memory: "256Mi" }
+      limits:   { cpu: "500m", memory: "512Mi" }
+    job:
+      parallelism: 1
+      completions: 1
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 7200
+    cron:
+      # job별로 분만 다르게 하여 5분 주기 분산
+      timeZone: "Asia/Seoul"
+      concurrencyPolicy: "Forbid"
+      startingDeadlineSeconds: 120
+      successHistory: 2
+      failedHistory: 1
+    service: { enabled: false }
+
+    # 파일(B): 공통 application.yaml 사용(필요시 job별로 교체 가능)
+    configMap:
+      enabled: true
+      files: ["application.yaml"]
+
+    # ENV(A): datasource/influx는 job별로 조금씩 다르게
+    datasource:
+      driver_class_name: com.mysql.cj.jdbc.Driver
+      url: jdbc:mysql://job-ds.default.svc.cluster.local:3306/jobdb
+      username: user
+      password: root
+    datasource_sub:
+      enabled: false
+    influx:
+      url: http://influxdb:8086
+      logLevel: BODY
+      readTimeout: 5s
+      writeTimeout: 5s
+      connectTimeout: 5s
+
+  jobs:
+    - <<: *jobBase # 앵커 불러오기 YAML 병합 키(merge key) *jobBase(에일리어스)로 가리킨 공통 블록을 이 항목에 합쳐 넣어라는 뜻 
+      name: batch-job-01
+      cron: { schedule: "0/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+      configMap: { enabled: true, name: batch-job-01-config, files: ["application.yaml"] }
+      args: ["--spring.profiles.active=dev","--rtm.batch.job.chunk=200"]
+
+    - <<: *jobBase
+      name: batch-job-02
+      cron: { schedule: "1/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+      configMap: { enabled: true, name: batch-job-02-config, files: ["application.yaml"] }
+
+    - <<: *jobBase
+      name: batch-job-03
+      cron: { schedule: "2/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+      datasource:
+        driver_class_name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://job03-ds.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+
+    - <<: *jobBase
+      name: batch-job-04
+      cron: { schedule: "3/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+
+    - <<: *jobBase
+      name: batch-job-05
+      cron: { schedule: "4/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+
+    - <<: *jobBase
+      name: batch-job-06
+      cron: { schedule: "0/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+      datasource_sub:
+        enabled: true
+        driver_class_name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://job06-ds-sub.default.svc.cluster.local:3306/jobdb
+        username: user
+        password: root
+
+    - <<: *jobBase
+      name: batch-job-07
+      cron: { schedule: "1/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+
+    - <<: *jobBase
+      name: batch-job-08
+      cron: { schedule: "2/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+
+    - <<: *jobBase
+      name: batch-job-09
+      cron: { schedule: "3/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+
+    - <<: *jobBase
+      name: batch-job-10
+      cron: { schedule: "4/5 * * * *", timeZone: "Asia/Seoul", concurrencyPolicy: "Forbid", startingDeadlineSeconds: 120, successHistory: 2, failedHistory: 1 }
+
+
+
+ 
+# 🧾 추가 고려 사항 반영: 실무형 Helm 배포 설계 기반 values.yaml
+# Kind 기반 로컬 테스트와 실운영 Kubernetes 배포 가능 설계
+
+# ✅ 전체 아키텍처 개요:
+# - 배치 구성: Spring Batch Job (10개) + SCDF Task 기반 Spring Batch (10개)
+# - 목적: 외부 DB → 데이터 추출 → 변환 → InfluxDB 저장 → Grafana/Prometheus 시각화
+# - Helm 기반으로 배포, Kind에서 테스트 후 K8s 운영 반영
+
+# mysql:
+#   enabled: true
+#   image:
+#     repository: mysql
+#     tag: "8.0"
+#   auth:
+#     rootPassword: root
+#     database: demo
+#     username: neodain
+#     password: Kht72@eye1
+#   service:
+#     port: 3306
+#     nodePort: 3307
+#   persistence:
+#     enabled: true
+#     mountPath: /var/lib/mysql
+#     existingClaim: mysql-pvc
+#   nodeSelector:
+#     role: work
+
+# mariadb:
+#   enabled: true
+#   image:
+#     repository: mariadb
+#     tag: "10"
+#   auth:
+#     rootPassword: root
+#     database: demo
+#     username: neodain
+#     password: Kht72@eye1
+#   service:
+#     port: 3306
+#     nodePort: 3308
+#   persistence:
+#     enabled: true
+#     mountPath: /var/lib/mysql
+#     existingClaim: mariadb-pvc
+#   nodeSelector:
+#     role: work
+
+# influxdb:
+#   enabled: true
+#   image:
+#     repository: influxdb
+#     tag: latest
+#   env:
+#     - name: DOCKER_INFLUXDB_INIT_MODE
+#       value: setup
+#     - name: DOCKER_INFLUXDB_INIT_USERNAME
+#       value: neodain
+#     - name: DOCKER_INFLUXDB_INIT_PASSWORD
+#       value: Kht72@eye1
+#     - name: DOCKER_INFLUXDB_INIT_ORG
+#       value: neodain
+#     - name: DOCKER_INFLUXDB_INIT_BUCKET
+#       value: neodain
+#     - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+#       value: xxxxxxxxxxxx 
+#   service:
+#     port: 8086
+#     nodePort: 8087
+#   persistence:
+#     enabled: true
+#     mountPath: /var/lib/influxdb2
+#     existingClaim: influxdb-pvc
+#   nodeSelector:
+#     role: main
+
+# grafana:
+#   enabled: true
+#   image:
+#     repository: grafana/grafana
+#     tag: latest
+#   service:
+#     port: 3000
+#     nodePort: 3001
+#   persistence:
+#     enabled: true
+#     mountPath: /var/lib/grafana
+#     existingClaim: grafana-pvc
+#   dependsOn:
+#     - influxdb
+#   nodeSelector:
+#     role: main
+
+# # 🎯 실무형 배치 앱 (Job + Task 구분 없이 확장 가능)
+# batchApps:
+#   enabled: true
+#   apps:
+#     - name: batch-job-01
+#       image: neodain/batch-job-01:latest
+#       command:
+#         - "--rtm.batch.job.start=202507091730"
+#         - "--rtm.batch.job.end=202507091740"
+#         - "--rtm.batch.job.chunk=200"
+#         - "--rtm.batch.job.interval=10"
+#         - "--rtm.batch.job.delay=5"
+#       service:
+#         port: 8080
+#       nodeSelector:
+#         role: work
+#     - name: batch-task-01
+#       image: neodain/batch-task-01:latest
+#       command:
+#         - "--spring.cloud.task.name=task01"
+#       service:
+#         port: 8080
+#       nodeSelector:
+#         role: work
+#     # ... 나머지 앱도 동일하게 확장 가능
+
+# # ✨ SCDF 관련 설정 (추후 scdf section 추가 예정)
+# scdf:
+#   enabled: true
+#   nodeSelector:
+#     role: main
+#   externalDatabase:
+#     host: mariadb
+#     port: 3306
+#     user: neodain
+#     password: Kht72@eye1
+#     database: demo
+#   skipper:
+#     enabled: true

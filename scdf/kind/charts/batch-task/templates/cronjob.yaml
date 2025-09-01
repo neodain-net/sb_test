@@ -1,0 +1,232 @@
+{{- $root := . -}}
+{{- range .Values.batchTasks.tasks }}
+{{- if or (eq .mode "cron") .cron.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "batch-task.resname" (dict "root" $root "name" (printf "%s-cron" .name)) }}
+  labels:
+    {{- include "batch-task.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
+  {{/*
+  annotations:
+    checksum/config: {{ include (print $.Template.BasePath "/configmap-file.yaml") . | sha256sum }}
+    checksum/env:    {{ include (print $.Template.BasePath "/configmap-env.yaml")  . | sha256sum }}
+    checksum/secret: {{ include (print $.Template.BasePath "/secret-env.yaml")     . | sha256sum }}
+    */}}
+    # 파일/시크릿이 바뀌면 파드가 자동으로 교체
+    # 이러면 application.yaml/env/비밀이 바뀔 때마다 파드가 새로 기동됨.
+spec:
+  # 표준 crontab. 예) "0 2 * * *" (매일 02:00)
+  schedule: {{ .cron.schedule | quote }}
+  # (k8s >= 1.27) 클러스터 타임존 사용. 미지원 버전이면 주석 처리
+  {{- if .cron.timeZone }}
+  timeZone: {{ .cron.timeZone | quote }}   # 예: "Asia/Seoul"
+  {{- end }}
+  # 동시에 겹치는 실행 방지: Forbid(기본 권장) / Replace / Allow
+  concurrencyPolicy: {{ .cron.concurrencyPolicy | default "Forbid" }}
+  # 일시 중지(배포는 유지, 실행만 멈춤)
+  suspend: {{ .cron.suspend | default false }}
+  # 스케줄 지연 허용 시간(초). 지났으면 이번은 건너뜀(옵션)
+  {{- if .cron.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ .cron.startingDeadlineSeconds }}
+  {{- end }}
+  successfulJobsHistoryLimit: {{ .cron.successHistory | default 3 }}
+  failedJobsHistoryLimit:     {{ .cron.failedHistory   | default 1 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .job.backoffLimit | default 0 }}
+      {{- if .job.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .job.activeDeadlineSeconds }}
+      {{- end }}
+      ttlSecondsAfterFinished: {{ .job.ttlSecondsAfterFinished | default 3600 }}
+      template:
+        metadata:
+          labels:
+            {{- include "batch-task.selectorLabels" $root | nindent 12 }}
+            app.kubernetes.io/component: {{ .name }}
+          {{- with .podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          {{- with .serviceAccountName }}
+          serviceAccountName: {{ . }}
+          {{- end }}
+          containers:
+            - name: {{ .name }}
+              image: "{{ .image.repository }}:{{ .image.tag }}"
+              imagePullPolicy: {{ .image.pullPolicy | default "IfNotPresent" }}
+              {{- with .command }}
+              command: {{ toJson . }}
+              {{- end }}
+              {{- with .args }}
+              args: {{ toJson . }}
+              {{- end }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-config
+                - secretRef:
+                    name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-secret
+                    optional: true
+              {{- with .env }}
+              env:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              resources:
+                requests:
+                  cpu:    {{ .resources.requests.cpu    | default "100m"  | quote }}
+                  memory: {{ .resources.requests.memory | default "128Mi" | quote }}
+                limits:
+                  cpu:    {{ .resources.limits.cpu      | default "500m"  | quote }}
+                  memory: {{ .resources.limits.memory   | default "512Mi" | quote }}
+              {{- with .volumeMounts }}
+              volumeMounts:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- with .volumes }}
+          # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 
+          # valumes 둘 다 설정 필요.
+          volumes:
+            {{- toYaml . | nindent 12 }}
+          {{/*
+          volumes:
+            - name: config-volume
+              configMap:
+                name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
+          */}}
+          {{- end }}
+          {{- with .nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+{{- end }}
+{{- end }}
+
+{{/*
+{{- $root := . -}}
+{{- range .Values.batchTasks.tasks }}
+{{- if or (eq .mode "cron") .cron.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "batch-task.resname" (dict "root" $root "name" (printf "%s-cron" .name)) }}
+  labels:
+    {{- include "batch-task.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
+spec:
+  schedule: {{ .cron.schedule | quote }}
+  {{- if .cron.timeZone }}
+  timeZone: {{ .cron.timeZone | quote }}
+  {{- end }}
+  concurrencyPolicy: {{ .cron.concurrencyPolicy | default "Forbid" }}
+  suspend: {{ .cron.suspend | default false }}
+  {{- if .cron.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ .cron.startingDeadlineSeconds }}
+  {{- end }}
+  successfulJobsHistoryLimit: {{ .cron.successHistory | default 3 }}
+  failedJobsHistoryLimit:     {{ .cron.failedHistory   | default 1 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .job.backoffLimit | default 0 }}
+      {{- if .job.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .job.activeDeadlineSeconds }}
+      {{- end }}
+      ttlSecondsAfterFinished: {{ .job.ttlSecondsAfterFinished | default 3600 }}
+      template:
+        metadata:
+          labels:
+            {{- include "batch-task.selectorLabels" $root | nindent 12 }}
+            app.kubernetes.io/component: {{ .name }}
+          {{- with .podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          {{- with .serviceAccountName }}
+          serviceAccountName: {{ . }}
+          {{- end }}
+          containers:
+            - name: {{ .name }}
+              image: "{{ .image.repository }}:{{ .image.tag }}"
+              imagePullPolicy: {{ .image.pullPolicy | default "IfNotPresent" }}
+              {{- with .command }}
+              command: {{ toJson . }}
+              {{- end }}
+              {{- with .args }}
+              args:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              # ====== 혼용 포인트: ENV/SECRET ======
+              {{- $envcm := printf "%s-env" (include "batch-task.resname" (dict "root" $root "name" .name)) -}}
+              {{- $envcm_exists := (or (and (hasKey . "datasource") .datasource) (and (hasKey . "datasource_sub") .datasource_sub) (hasKey . "influx")) -}}
+              envFrom:
+                {{- if $envcm_exists }}
+                - configMapRef:
+                    name: {{ $envcm }}
+                {{- end }}
+                - secretRef:
+                    name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-secret
+                    optional: true
+              # ====== 혼용 포인트: 파일 마운트 ======
+              {{- if and .configMap .configMap.enabled .configMap.files }}
+              env:
+                - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+                  value: "/config/"
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /config
+                  readOnly: true
+              {{- with .volumeMounts }}
+                {{- toYaml . | nindent 14 }}
+              {{- end }}
+              {{- else }}
+              {{- with .volumeMounts }}
+              volumeMounts:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- end }}
+              resources:
+                requests:
+                  cpu:    {{ .resources.requests.cpu    | default "200m"  | quote }}
+                  memory: {{ .resources.requests.memory | default "256Mi" | quote }}
+                limits:
+                  cpu:    {{ .resources.limits.cpu      | default "500m"  | quote }}
+                  memory: {{ .resources.limits.memory   | default "512Mi" | quote }}
+          {{- if and .configMap .configMap.enabled .configMap.files }}
+          volumes:
+            - name: config-volume
+              configMap:
+                name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
+          {{- end }}
+          {{- with .volumes }}
+          volumes:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+{{- end }}
+{{- end }}
+*/}}

@@ -4,9 +4,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $root.Release.Name }}-{{ .name }}-config
+  name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-config
   labels:
     {{- include "batch-task.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
 data:
   application.yml: |
     application:

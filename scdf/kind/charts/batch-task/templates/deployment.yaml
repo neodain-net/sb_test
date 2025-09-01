@@ -1,78 +1,106 @@
 ## templates/deployment.yaml (공통 템플릿)
 {{- $root := . }}
 {{- range .Values.batchTasks.tasks }}
+{{- if or (eq .mode "deployment") .deployment.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $root.Release.Name }}-{{ .name }} {{/* name: {{ include "batch-task.fullname" $root }} */}}
+  name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}
   labels:
     {{- include "batch-task.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
 spec:
-  replicas: {{ .replicaCount }} 
+  replicas: {{ .replicaCount | default 1 }} 
   selector:
     matchLabels:
-      app: {{ .name }} {{/* app: {{ include "batch-task.name" $root }} */}}
+      {{- include "batch-task.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ .name }}
   template:
     metadata:
       labels:
-        app: {{ .name }} {{/* app: {{ include "batch-task.name" $root }} */}}
+        {{- include "batch-task.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ .name }}
     spec:
       containers:
         - name: {{ .name }}
           image: "{{ .image.repository }}:{{ .image.tag }}"
-          imagePullPolicy: {{ .pullPolicy | default "IfNotPresent" }}
-          args: {{ toJson .arguments }}
-          env:
-{{- range .env }}
-            - name: {{ .name }}
-              value: {{ .value | quote }}
-{{- end }}
-          args: {{/* args: {{ toJson .arguments }} */}}
-{{- range .command }}
-            - {{ . | quote }}
-{{- end }}
-          ports:
-            - containerPort: {{ .service.port }}
+          imagePullPolicy: {{ .image.pullPolicy | default "IfNotPresent" }}
+
+          {{- with .command }}   # // with를 사용할 경우, command 체크 후 내용 출력.
+          command: {{ toJson . }}
+          {{- end }}
+
+          {{- with .args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
           envFrom:
             - configMapRef:
-                name: {{ $root.Release.Name}}-{{ .name }}-config
+                name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-config
             - secretRef:
-                name: {{ $root.Release.Name}}-{{ .name }}-secret
+                name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-secret
+                optional: true 
+                {{/* # Secret 없을 때도 기동되도록 완충 */}}
+
+          {{- with .env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .resources }}
           resources:
-            limits:
-              memory: {{ .resources.limits.memory }}
-              cpu: {{ .resources.limits.cpu }}
             requests:
-              memory: {{ .resources.requests.memory }}
-              cpu: {{ .resources.requests.cpu }}
+              cpu: {{ .requests.cpu | default "100m" | quote }}
+              memory: {{ .requests.memory | default "128Mi" | quote }}
+            limits:
+              cpu: {{ .limits.cpu | default "500m" | quote }}
+              memory: {{ .limits.memory | default "512Mi" | quote }}
+          {{- end }}
+
+          {{- with .volumeMounts }}
           volumeMounts:
-{{- range .volumeMounts }}
-            - name: {{ .name }}
-              mountPath: {{ .mountPath }}
-{{- end }}
-          livenessProbe: 
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .livenessProbe }}
+          livenessProbe:
             {{- toYaml .livenessProbe | nindent 12 }}
-          readinessProbe: 
+          {{- end }}
+
+          {{- with .readinessProbe }}
+          readinessProbe:
             {{- toYaml .readinessProbe | nindent 12 }}
+          {{- end }}
+      {{- with .volumes }}   
+      # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 
+      # valumes 둘 다 설정 필요.
       volumes:
-{{- if .configMap.enabled }}
-        - name: config-volume 
+        {{- toYaml . | nindent 12 }}
+      {{/*
+      volumes:
+        - name: config-volume
           configMap:
-            name: {{ $root.Release.Name }}-{{ .configMap.name }}
-{{- end }}
-      restartPolicy: 
-        {{ .restartPolicy | default "Never" }}
-      nodeSelector: 
+            name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
+      */}}
+      {{- end }}
+
+      restartPolicy:
+        {{ .restartPolicy | default "Always" }} 
+
+      {{- with .nodeSelector }}
+      nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
-      affinity: {{/* affinity: {{- toYaml .affinity | nindent 8 }} */}}
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: role
-                    operator: In
-                    values:
-                      - {{ .nodeSelector.role }}
-      tolerations: 
-        {{- toYaml .tolerations | nindent 8 }}
+      {{- end }}
+
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }} 
+      {{- end }}
+
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
 {{- end }}

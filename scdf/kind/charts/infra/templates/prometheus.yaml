@@ -1,0 +1,216 @@
+{{- if .Values.prometheus.enabled -}}
+{{- /* ===== 준비: 안전 변수들 ===== */ -}}
+{{- $p        := default (dict) .Values.prometheus -}}
+{{- $server   := default (dict) (index $p "server") -}}
+{{- $img      := default (dict) (index $p "image") -}}
+{{- $name     := (include "batch-infra.prometheus.name" . | default (printf "%s-prometheus" .Release.Name) | trim) -}}
+
+{{- /* Global 설정 기본값 */ -}}
+{{- $global := dict
+      "scrape_interval"   ((index $server "global" "scrape_interval")   | default "15s")
+      "evaluation_interval" ((index $server "global" "evaluation_interval") | default "15s")
+-}}
+
+{{- /* 기본 스크레이프 잡: annotation 기반 */ -}}
+{{- $annotJob := dict
+      "job_name" "kubernetes-pods-annotated"
+      "kubernetes_sd_configs" (list (dict "role" "pod"))
+      "relabel_configs" (list
+        (dict "action" "keep" "source_labels" (list "__meta_kubernetes_pod_annotation_prometheus_io_scrape") "regex" "true")
+        (dict "action" "replace" "source_labels" (list "__meta_kubernetes_pod_annotation_prometheus_io_path") "target_label" "__metrics_path__" "regex" "(.+)")
+        (dict "action" "replace" "source_labels" (list "__meta_kubernetes_pod_annotation_prometheus_io_port") "target_label" "__address__" "regex" "(.*)" "replacement" "$1")
+      )
+-}}
+
+{{- /* 추가 스크레이프가 있으면 합치기 */ -}}
+{{- $scrapes := list $annotJob -}}
+{{- with (index $server "extraScrapeConfigs") -}}
+  {{- $scrapes = concat $scrapes . -}}
+{{- end -}}
+
+{{- /* 최종 prometheus.yml 구성 */ -}}
+{{- $promCfg := dict "global" $global "scrape_configs" $scrapes -}}
+
+{{- /* 파드 annotations: 글로벌 + 로컬 합치고 checksum 추가 */ -}}
+{{- $ann := dict -}}
+{{- $ann = merge $ann (default (dict) .Values.global.podAnnotations) -}}
+{{- $ann = merge $ann (default (dict) (index $p "podAnnotations")) -}}
+{{- $checksum := (dict
+      "global" (index $server "global")
+      "scrapes" (index $server "extraScrapeConfigs")
+      "flags" (index $server "extraFlags")
+    ) | toYaml | sha256sum -}}
+{{- $_ := set $ann "checksum/config" $checksum -}}
+
+# -------------------------------
+# ServiceAccount / RBAC
+# -------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes","nodes/proxy","services","endpoints","pods","configmaps"]
+    verbs: ["get","list","watch"]
+  - apiGroups: ["extensions","networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get","list","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+
+# -------------------------------
+# ConfigMap: prometheus.yml
+# -------------------------------
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "batch-infra.prometheus.configName" . }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |-
+{{ toYaml $promCfg | nindent 4 }}
+
+# -------------------------------
+# StatefulSet (Prometheus Server)
+# -------------------------------
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ (index $p "replicaCount") | default 1 }}
+  selector:
+    matchLabels:
+{{- include "batch-infra.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+{{- include "batch-infra.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ $name }}
+      annotations:
+{{ toYaml $ann | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+{{- with (index $server "nodeSelector") }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $server "affinity") }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with (index $server "tolerations") }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+      containers:
+        - name: prometheus
+          image: "{{ (index $img "repository") | default "prom/prometheus" }}:{{ (index $img "tag") | default "v2.53.0" }}"
+          imagePullPolicy: {{ (index $img "pullPolicy") | default "IfNotPresent" }}
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+{{- range (default (list) (index $server "extraFlags")) }}
+            - "{{ . }}"
+{{- end }}
+          ports:
+            - name: http
+              containerPort: 9090
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 10
+{{- with (index $server "resources") }}
+          resources:
+{{ toYaml . | nindent 12 }}
+{{- else }}
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+{{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: storage
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "batch-infra.prometheus.configName" . }}
+{{- if not (index $server "persistentVolume" "enabled") }}
+        - name: storage
+          emptyDir: {}
+{{- end }}
+{{- if (index $server "persistentVolume" "enabled") }}
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+        labels:
+{{- include "batch-infra.labels" . | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ (index $server "persistentVolume" "storageClass") | default "standard" }}
+        resources:
+          requests:
+            storage: {{ (index $server "persistentVolume" "size") | default "10Gi" }}
+{{- end }}
+
+# -------------------------------
+# Service
+# -------------------------------
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  type: {{ (index $server "service" "type") | default "ClusterIP" }}
+  selector:
+{{- include "batch-infra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+{{- if eq ((index $server "service" "type") | default "ClusterIP") "NodePort" }}
+      nodePort: {{ (index $server "service" "nodePort") | default 30090 }}
+{{- end }}
+{{- end -}}

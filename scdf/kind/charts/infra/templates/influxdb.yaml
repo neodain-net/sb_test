@@ -1,0 +1,73 @@
+{{- if .Values.influxdb.enabled }}
+{{- $name := include "batch-infra.influxdb.name" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels: {{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "batch-infra.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "batch-infra.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ $name }}
+      annotations:
+        {{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.influxdb.podAnnotations) | nindent 8 }}
+    spec:
+      {{- with .Values.influxdb.nodeSelector }}
+      nodeSelector: 
+{{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: influxdb
+          image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.influxdb.image.repository "tag" .Values.influxdb.image.tag) }}
+          imagePullPolicy: {{ include "batch-infra.imagePullPolicy" .Values.influxdb.image.pullPolicy }}
+          env:
+            {{- range .Values.influxdb.env }}
+            - name: {{ .name }}
+              {{- if .valueFrom }}
+              valueFrom: 
+{{- toYaml .valueFrom | nindent 16 }}
+              {{- else }}
+              value: {{ .value | quote }}
+              {{- end }}
+            {{- end }}
+          ports: [ { name: http, containerPort: {{ .Values.influxdb.service.port | default 8086 }} } ]
+          livenessProbe:  { httpGet: { path: /health, port: http }, initialDelaySeconds: 20 }
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
+          volumeMounts:
+            - { name: data, mountPath: {{ .Values.influxdb.persistence.mountPath | default "/var/lib/influxdb2" }} }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: {{- include "batch-infra.labels" . | nindent 8 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.influxdb.persistence.storageClass | default "standard" }}
+        resources: { requests: { storage: {{ .Values.influxdb.persistence.size | default "1Gi" }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.influxdb.service.type | default "ClusterIP" }}
+  selector:
+{{- include "batch-infra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: {{ .Values.influxdb.service.port | default 8086 }}
+      targetPort: http
+      {{- if eq (.Values.influxdb.service.type | default "ClusterIP") "NodePort" }}
+      nodePort: {{ .Values.influxdb.service.nodePort | default 30086 }}
+      {{- end }}
+{{- end }}

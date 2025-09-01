@@ -1,18 +1,27 @@
-{{- $root := . }}
+{{- $root := . -}}
 {{- range .Values.batchTasks.tasks }}
+{{- if .service.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $root.Release.Name }}-{{ .name }} {{/* name: {{ include "batch-task.fullname" $root }} */}}
+  name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}
   labels:
     {{- include "batch-task.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
 spec:
-  type: NodePort
+  type: {{ .service.type | default "ClusterIP" }}
   selector:
-    app: {{ .name }} {{/* app: {{ include "batch-task.name" $root }} */}}
+    {{- include "batch-task.selectorLabels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
   ports:
-    - name: TCP 
+    - name: {{ .service.name | default "http" | lower }}
       port: {{ .service.port }}
-      targetPort: {{ .service.port }}
-      nodePort: {{ add 30000 .service.port }}
+      targetPort: {{ .service.targetPort | default .service.port }}
+      {{- if and (eq (.service.type | default "ClusterIP") "NodePort") .service.nodePort }}
+      {{/* 서비스 타입이 NodePort이고 nodePort 숫자도 지정돼 있을 때만 nodePort: 라인을 출력하자는 조건문 */}}
+      nodePort: {{ .service.nodePort }}
+      {{/* nodePort: {{ add .service.nodePort }} # nodePort는 30000–32767 내에서만! */}}
+      {{- end }}
 {{- end }}
+{{- end }}
+

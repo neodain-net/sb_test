@@ -1,0 +1,88 @@
+{{- if .Values.mariadb.enabled }}
+{{- $name := include "batch-infra.mariadb.name" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+{{- include "batch-infra.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+{{- include "batch-infra.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ $name }}
+      annotations:
+{{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mariadb.podAnnotations) | nindent 8 }}
+    spec:
+      {{- with .Values.mariadb.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mariadb
+          image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.mariadb.image.repository "tag" .Values.mariadb.image.tag) }}
+          imagePullPolicy: {{ include "batch-infra.imagePullPolicy" .Values.mariadb.image.pullPolicy }}
+          env:
+            {{- range .Values.mariadb.env }}
+            {{- if eq .name "rootPassword" }}
+            - name: MARIADB_ROOT_PASSWORD
+              value: "{{ .value }}"
+            {{- end }}
+            {{- if eq .name "database" }}
+            - name: MARIADB_DATABASE
+              value: "{{ .value }}"
+            {{- end }}
+            {{- if eq .name "username" }}
+            - name: MARIADB_USER
+              value: "{{ .value }}"
+            {{- end }}
+            {{- if eq .name "password" }}
+            - name: MARIADB_PASSWORD
+              value: "{{ .value }}"
+            {{- end }}
+            {{- end }}
+          ports: [ { name: mariadb, containerPort: {{ .Values.mariadb.service.port | default 3306 }} } ]
+          livenessProbe:
+            exec: { command: ["sh","-c","mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"] }
+            initialDelaySeconds: 30
+          readinessProbe:
+            exec: { command: ["sh","-c","mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"] }
+            initialDelaySeconds: 15
+          volumeMounts:
+            - { name: data, mountPath: {{ .Values.mariadb.persistence.mountPath | default "/var/lib/mysql" }} }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+{{- include "batch-infra.labels" . | nindent 8 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.mariadb.persistence.storageClass | default "standard" }}
+        resources: { requests: { storage: {{ .Values.mariadb.persistence.size | default "1Gi" }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+{{- include "batch-infra.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.mariadb.service.type | default "ClusterIP" }}
+  selector:
+{{- include "batch-infra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: mariadb
+      port: {{ .Values.mariadb.service.port | default 3306 }}
+      targetPort: mariadb
+      {{- if eq (.Values.mariadb.service.type | default "ClusterIP") "NodePort" }}
+      nodePort: {{ .Values.mariadb.service.nodePort | default 30307 }}
+      {{- end }}
+{{- end }}
