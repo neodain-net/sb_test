@@ -18,7 +18,7 @@
       "relabel_configs" (list
         (dict "action" "keep" "source_labels" (list "__meta_kubernetes_pod_annotation_prometheus_io_scrape") "regex" "true")
         (dict "action" "replace" "source_labels" (list "__meta_kubernetes_pod_annotation_prometheus_io_path") "target_label" "__metrics_path__" "regex" "(.+)")
-        (dict "action" "replace" "source_labels" (list "__meta_kubernetes_pod_annotation_prometheus_io_port") "target_label" "__address__" "regex" "(.*)" "replacement" "$1")
+        (dict "action" "replace" "source_labels" (list ("__meta_kubernetes_pod_ip") ("__meta_kubernetes_pod_annotation_prometheus_io_port")) "target_label" "__address__" "regex" "(.+);(.+)" "replacement" "${1}:${2}")
       )
 -}}
 
@@ -52,6 +52,7 @@ metadata:
   labels:
 {{- include "batch-infra.labels" . | nindent 4 }}
 ---
+
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -64,6 +65,7 @@ rules:
     resources: ["ingresses"]
     verbs: ["get","list","watch"]
 ---
+
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -76,11 +78,11 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ .Release.Namespace }}
+---
 
 # -------------------------------
 # ConfigMap: prometheus.yml
 # -------------------------------
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -90,28 +92,28 @@ metadata:
 data:
   prometheus.yml: |-
 {{ toYaml $promCfg | nindent 4 }}
+---
 
 # -------------------------------
 # StatefulSet (Prometheus Server)
 # -------------------------------
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ $name }}
   labels:
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   serviceName: {{ $name }}
   replicas: {{ (index $p "replicaCount") | default 1 }}
   selector:
     matchLabels:
-{{- include "batch-infra.selectorLabels" . | nindent 6 }}
+      {{- include "batch-infra.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/name: {{ $name }}
   template:
     metadata:
       labels:
-{{- include "batch-infra.selectorLabels" . | nindent 8 }}
+        {{- include "batch-infra.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/name: {{ $name }}
       annotations:
 {{ toYaml $ann | nindent 8 }}
@@ -182,7 +184,7 @@ spec:
     - metadata:
         name: storage
         labels:
-{{- include "batch-infra.labels" . | nindent 10 }}
+          {{- include "batch-infra.labels" . | nindent 10 }}
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: {{ (index $server "persistentVolume" "storageClass") | default "standard" }}
@@ -190,11 +192,11 @@ spec:
           requests:
             storage: {{ (index $server "persistentVolume" "size") | default "10Gi" }}
 {{- end }}
+---
 
 # -------------------------------
 # Service
 # -------------------------------
----
 apiVersion: v1
 kind: Service
 metadata:

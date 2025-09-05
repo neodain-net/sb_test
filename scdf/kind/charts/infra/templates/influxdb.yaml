@@ -22,22 +22,16 @@ spec:
     spec:
       {{- with .Values.influxdb.nodeSelector }}
       nodeSelector: 
-{{- toYaml . | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: influxdb
           image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.influxdb.image.repository "tag" .Values.influxdb.image.tag) }}
           imagePullPolicy: {{ include "batch-infra.imagePullPolicy" .Values.influxdb.image.pullPolicy }}
+          {{- with .Values.influxdb.env }}
           env:
-            {{- range .Values.influxdb.env }}
-            - name: {{ .name }}
-              {{- if .valueFrom }}
-              valueFrom: 
-{{- toYaml .valueFrom | nindent 16 }}
-              {{- else }}
-              value: {{ .value | quote }}
-              {{- end }}
-            {{- end }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports: [ { name: http, containerPort: {{ .Values.influxdb.service.port | default 8086 }} } ]
           livenessProbe:  { httpGet: { path: /health, port: http }, initialDelaySeconds: 20 }
           readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
@@ -46,7 +40,8 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: data
-        labels: {{- include "batch-infra.labels" . | nindent 8 }}
+        labels:
+          {{- include "batch-infra.labels" . | nindent 10 }}
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: {{ .Values.influxdb.persistence.storageClass | default "standard" }}
@@ -57,11 +52,11 @@ kind: Service
 metadata:
   name: {{ $name }}
   labels:
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.influxdb.service.type | default "ClusterIP" }}
   selector:
-{{- include "batch-infra.selectorLabels" . | nindent 4 }}
+    {{- include "batch-infra.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/name: {{ $name }}
   ports:
     - name: http

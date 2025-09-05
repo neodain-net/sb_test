@@ -1,0 +1,25 @@
+{{- /*
+  Purpose: Validate mutually exclusive mode per task item.
+*/ -}}
+{{- range $idx, $it := .Values.batchTasks.tasks }}
+  {{- $name := default (printf "item-%d" $idx) $it.name -}}
+  {{- $mode := default "" $it.mode -}}
+
+  {{- $wantTask  := eq $mode "task" -}}
+  {{- $wantCron := eq $mode "cron" -}}
+  {{- $wantDep  := eq $mode "deployment" -}}
+  {{- $cnt := 0 -}}
+  {{- if $wantTask  }}{{- $cnt = add $cnt 1 -}}{{- end -}}
+  {{- if $wantCron }}{{- $cnt = add $cnt 1 -}}{{- end -}}
+  {{- if $wantDep  }}{{- $cnt = add $cnt 1 -}}{{- end -}}
+
+  {{- if ne $cnt 1 -}}
+    {{- fail (printf "batch-task: '%s' must set exactly one mode to 'task' | 'cron' | 'deployment' (got mode=%q)" $name $mode) -}}
+  {{- end -}}
+
+  {{- if $wantCron -}}
+    {{- if not (and $it.cron $it.cron.schedule) -}}
+      {{- fail (printf "batch-task: '%s' mode=cron requires .cron.schedule (crontab) in values" $name) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end }}

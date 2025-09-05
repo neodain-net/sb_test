@@ -5,48 +5,34 @@ kind: StatefulSet
 metadata:
   name: {{ $name }}
   labels:
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   serviceName: {{ $name }}
   replicas: 1
   selector:
     matchLabels:
-{{- include "batch-infra.selectorLabels" . | nindent 6 }}
+      {{- include "batch-infra.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/name: {{ $name }}
   template:
     metadata:
       labels:
-{{- include "batch-infra.selectorLabels" . | nindent 8 }}
+        {{- include "batch-infra.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/name: {{ $name }}
       annotations:
-{{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mysql.podAnnotations) | nindent 8 }}
+        {{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mysql.podAnnotations) | nindent 8 }}
     spec:
       {{- with .Values.mysql.nodeSelector }}
-      nodeSelector: {{- toYaml . | nindent 8 }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: mysql
           image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.mysql.image.repository "tag" .Values.mysql.image.tag) }}
           imagePullPolicy: {{ include "batch-infra.imagePullPolicy" .Values.mysql.image.pullPolicy }}
+          {{- with .Values.mysql.env }}
           env:
-            {{- range .Values.mysql.env }}
-            {{- if eq .name "rootPassword" }}
-            - name: MYSQL_ROOT_PASSWORD
-              value: "{{ .value }}"
-            {{- end }}
-            {{- if eq .name "database" }}
-            - name: MYSQL_DATABASE
-              value: "{{ .value }}"
-            {{- end }}
-            {{- if eq .name "username" }}
-            - name: MYSQL_USER
-              value: "{{ .value }}"
-            {{- end }}
-            {{- if eq .name "password" }}
-            - name: MYSQL_PASSWORD
-              value: "{{ .value }}"
-            {{- end }}
-            {{- end }}
+            {{- toYaml . | nindent 12 -}}
+          {{- end }}
           ports: [ { name: mysql, containerPort: {{ .Values.mysql.service.port | default 3306 }} } ]
           livenessProbe:
             exec: { command: ["sh","-c","mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD"] }
@@ -60,7 +46,8 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: data
-        labels: {{- include "batch-infra.labels" . | nindent 8 }}
+        labels: 
+          {{- include "batch-infra.labels" . | nindent 10 }}
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: {{ .Values.mysql.persistence.storageClass | default "standard" }}
@@ -72,11 +59,11 @@ kind: Service
 metadata:
   name: {{ $name }}
   labels:
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.mysql.service.type | default "ClusterIP" }}
   selector:
-{{- include "batch-infra.selectorLabels" . | nindent 4 }}
+    {{- include "batch-infra.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/name: {{ $name }}
   ports:
     - name: mysql

@@ -6,6 +6,10 @@
 {{- $hasDSS := and (hasKey . "datasource_sub") .datasource_sub -}}
 {{- $hasIFX := hasKey . "influx" -}}
 {{- if or $hasDS $hasDSS $hasIFX }}
+{{/* 
+    NOTE: 이 ConfigMap은 envFrom(환경변수)로만 주입. 파일 마운트는 configmap-file.yaml에서 생성되는 "*-config"를 사용.
+    이름 규칙: "<fullname-of-app>-env"
+*/}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -5,49 +5,34 @@ kind: StatefulSet
 metadata:
   name: {{ $name }}
   labels:
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   serviceName: {{ $name }}
   replicas: 1
   selector:
     matchLabels:
-{{- include "batch-infra.selectorLabels" . | nindent 6 }}
+      {{- include "batch-infra.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/name: {{ $name }}
   template:
     metadata:
       labels:
-{{- include "batch-infra.selectorLabels" . | nindent 8 }}
+        {{- include "batch-infra.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/name: {{ $name }}
       annotations:
-{{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mariadb.podAnnotations) | nindent 8 }}
+        {{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mariadb.podAnnotations) | nindent 8 }}
     spec:
       {{- with .Values.mariadb.nodeSelector }}
       nodeSelector:
-{{- toYaml . | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: mariadb
           image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.mariadb.image.repository "tag" .Values.mariadb.image.tag) }}
           imagePullPolicy: {{ include "batch-infra.imagePullPolicy" .Values.mariadb.image.pullPolicy }}
+          {{- with .Values.mariadb.env }}
           env:
-            {{- range .Values.mariadb.env }}
-            {{- if eq .name "rootPassword" }}
-            - name: MARIADB_ROOT_PASSWORD
-              value: "{{ .value }}"
-            {{- end }}
-            {{- if eq .name "database" }}
-            - name: MARIADB_DATABASE
-              value: "{{ .value }}"
-            {{- end }}
-            {{- if eq .name "username" }}
-            - name: MARIADB_USER
-              value: "{{ .value }}"
-            {{- end }}
-            {{- if eq .name "password" }}
-            - name: MARIADB_PASSWORD
-              value: "{{ .value }}"
-            {{- end }}
-            {{- end }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports: [ { name: mariadb, containerPort: {{ .Values.mariadb.service.port | default 3306 }} } ]
           livenessProbe:
             exec: { command: ["sh","-c","mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"] }
@@ -61,7 +46,7 @@ spec:
     - metadata:
         name: data
         labels:
-{{- include "batch-infra.labels" . | nindent 8 }}
+          {{- include "batch-infra.labels" . | nindent 10 }}
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: {{ .Values.mariadb.persistence.storageClass | default "standard" }}

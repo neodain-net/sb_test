@@ -1,6 +1,12 @@
 {{- $root := . -}}
 {{- range .Values.batchTasks.tasks }}
-{{- if or (eq .mode "cron") .cron.enabled }}
+{{- if eq .mode "cron" }}
+{{- $kver := $root.Capabilities.KubeVersion.Version -}}
+{{- $envcm := printf "%s-env" (include "batch-task.resname" (dict "root" $root "name" .name)) -}}
+{{- $envcm_exists := (or (and (hasKey . "datasource") .datasource)
+                         (and (hasKey . "datasource_sub") .datasource_sub)
+                         (hasKey . "influx")) -}}
+
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -8,47 +14,38 @@ metadata:
   labels:
     {{- include "batch-task.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ .name }}
-  {{/*
-  annotations:
-    checksum/config: {{ include (print $.Template.BasePath "/configmap-file.yaml") . | sha256sum }}
-    checksum/env:    {{ include (print $.Template.BasePath "/configmap-env.yaml")  . | sha256sum }}
-    checksum/secret: {{ include (print $.Template.BasePath "/secret-env.yaml")     . | sha256sum }}
-    */}}
-    # 파일/시크릿이 바뀌면 파드가 자동으로 교체
-    # 이러면 application.yaml/env/비밀이 바뀔 때마다 파드가 새로 기동됨.
 spec:
-  # 표준 crontab. 예) "0 2 * * *" (매일 02:00)
   schedule: {{ .cron.schedule | quote }}
-  # (k8s >= 1.27) 클러스터 타임존 사용. 미지원 버전이면 주석 처리
-  {{- if .cron.timeZone }}
-  timeZone: {{ .cron.timeZone | quote }}   # 예: "Asia/Seoul"
+  {{- if and .cron.timeZone (semverCompare ">=1.27.0" $kver) }}
+  timeZone: {{ .cron.timeZone | quote }}
   {{- end }}
-  # 동시에 겹치는 실행 방지: Forbid(기본 권장) / Replace / Allow
   concurrencyPolicy: {{ .cron.concurrencyPolicy | default "Forbid" }}
-  # 일시 중지(배포는 유지, 실행만 멈춤)
   suspend: {{ .cron.suspend | default false }}
-  # 스케줄 지연 허용 시간(초). 지났으면 이번은 건너뜀(옵션)
   {{- if .cron.startingDeadlineSeconds }}
   startingDeadlineSeconds: {{ .cron.startingDeadlineSeconds }}
   {{- end }}
-  successfulJobsHistoryLimit: {{ .cron.successHistory | default 3 }}
-  failedJobsHistoryLimit:     {{ .cron.failedHistory   | default 1 }}
+  successfulJobsHistoryLimit: {{ .cron.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit:     {{ .cron.failedJobsHistoryLimit     | default 1 }}
   jobTemplate:
     spec:
-      backoffLimit: {{ .job.backoffLimit | default 0 }}
-      {{- if .job.activeDeadlineSeconds }}
-      activeDeadlineSeconds: {{ .job.activeDeadlineSeconds }}
+      parallelism: {{ .task.parallelism   | default 1 }}
+      completions: {{ .task.completions   | default 1 }}
+      backoffLimit: {{ .task.backoffLimit | default 0 }}
+      {{- if .task.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .task.activeDeadlineSeconds }}
       {{- end }}
-      ttlSecondsAfterFinished: {{ .job.ttlSecondsAfterFinished | default 3600 }}
+      ttlSecondsAfterFinished: {{ .task.ttlSecondsAfterFinished | default 3600 }}
       template:
         metadata:
           labels:
             {{- include "batch-task.selectorLabels" $root | nindent 12 }}
             app.kubernetes.io/component: {{ .name }}
-          {{- with .podAnnotations }}
+          {{ $anns := dict }}
+          {{- with .podAnnotations }}{{- $_ := merge $anns . -}}{{- end }}
+          {{- $_ := set $anns "checksum/config-env"  (include (print $.Template.BasePath "/configmap-env.yaml")  $root | sha256sum) -}}
+          {{- $_ := set $anns "checksum/config-file" (include (print $.Template.BasePath "/configmap-file.yaml") $root | sha256sum) -}}
           annotations:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- toYaml $anns | nindent 12 }}
         spec:
           restartPolicy: Never
           {{- with .serviceAccountName }}
@@ -65,15 +62,13 @@ spec:
               args: {{ toJson . }}
               {{- end }}
               envFrom:
+                {{- if $envcm_exists }}
                 - configMapRef:
-                    name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-config
+                    name: {{ $envcm }}
+                {{- end }}
                 - secretRef:
                     name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-secret
                     optional: true
-              {{- with .env }}
-              env:
-                {{- toYaml . | nindent 16 }}
-              {{- end }}
               resources:
                 requests:
                   cpu:    {{ .resources.requests.cpu    | default "100m"  | quote }}
@@ -81,21 +76,41 @@ spec:
                 limits:
                   cpu:    {{ .resources.limits.cpu      | default "500m"  | quote }}
                   memory: {{ .resources.limits.memory   | default "512Mi" | quote }}
+              {{- if and .configMap .configMap.enabled .configMap.files }}
+              env:
+                - name: SPRING_MAIN_WEB_APPLICATION_TYPE
+                  value: "none"
+                - name: JAVA_TOOL_OPTIONS
+                  value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
+                - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+                  value: "/config/"
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /config
+                  readOnly: true
+              {{- else }}
+              {{- with .env }}
+              env:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
               {{- with .volumeMounts }}
               volumeMounts:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
-          {{- with .volumes }}
-          # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 
-          # valumes 둘 다 설정 필요.
-          volumes:
-            {{- toYaml . | nindent 12 }}
-          {{/*
+              {{- end }}
+          {{- if and .configMap .configMap.enabled .configMap.files }}
           volumes:
             - name: config-volume
               configMap:
-                name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
-          */}}
+                name: {{ .configMap.name | default (printf "%s-config" (include "batch-task.resname" (dict "root" $root "name" .name))) }}
+          {{- else }}
+          {{- with .volumes }}
+          volumes:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .volumeMounts (not .volumes) }}
+            {{- fail (printf "volumeMounts provided for %q but no matching 'volumes' defined (and no file-based ConfigMap in use)" .name) -}}
+          {{- end }}
           {{- end }}
           {{- with .nodeSelector }}
           nodeSelector:
@@ -138,11 +153,11 @@ spec:
   failedJobsHistoryLimit:     {{ .cron.failedHistory   | default 1 }}
   jobTemplate:
     spec:
-      backoffLimit: {{ .job.backoffLimit | default 0 }}
-      {{- if .job.activeDeadlineSeconds }}
-      activeDeadlineSeconds: {{ .job.activeDeadlineSeconds }}
+      backoffLimit: {{ .task.backoffLimit | default 0 }}
+      {{- if .task.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .task.activeDeadlineSeconds }}
       {{- end }}
-      ttlSecondsAfterFinished: {{ .job.ttlSecondsAfterFinished | default 3600 }}
+      ttlSecondsAfterFinished: {{ .task.ttlSecondsAfterFinished | default 3600 }}
       template:
         metadata:
           labels:

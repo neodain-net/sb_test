@@ -1,10 +1,16 @@
 {{- $root := . -}}
 {{- range .Values.batchJobs.jobs }}
-{{- if or (eq .mode "job") .job.enabled }}
+{{- if eq .mode "job" }}
+{{/* # ====== 혼용 포인트: ENV/SECRET 일괄 주입 ====== */}}
+{{/* ConfigMap/Secret 환경변수 일괄 주입 */}}
+{{- $envcm := printf "%s-env" (include "batch-job.resname" (dict "root" $root "name" .name)) -}}
+{{- $envcm_exists := (or (and (hasKey . "datasource") .datasource)
+                         (and (hasKey . "datasource_sub") .datasource_sub)
+                         (hasKey . "influx")) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}
+  name: {{ include "batch-job.resname" (dict "root" $root "name" (printf "%s-job" .name)) }}
   labels:
     {{- include "batch-job.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ .name }}
@@ -21,10 +27,12 @@ spec:
       labels:
         {{- include "batch-job.selectorLabels" $root | nindent 8 }}
         app.kubernetes.io/component: {{ .name }}
-      {{- with .podAnnotations }}
+      {{ $anns := dict }}
+      {{- with .podAnnotations }}{{- $_ := merge $anns . -}}{{- end }}
+      {{- $_ := set $anns "checksum/config-env"  (include (print $.Template.BasePath "/configmap-env.yaml")  $root | sha256sum) -}}
+      {{- $_ := set $anns "checksum/config-file" (include (print $.Template.BasePath "/configmap-file.yaml") $root | sha256sum) -}}
       annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- toYaml $anns | nindent 8 }}
     spec:
       restartPolicy: Never
       {{- with .serviceAccountName }}
@@ -41,9 +49,6 @@ spec:
           args:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          # ====== 혼용 포인트: ENV/SECRET 일괄 주입 ======
-          {{- $envcm := printf "%s-env" (include "batch-job.resname" (dict "root" $root "name" .name)) -}}
-          {{- $envcm_exists := (or (and (hasKey . "datasource") .datasource) (and (hasKey . "datasource_sub") .datasource_sub) (hasKey . "influx")) -}}
           envFrom:
             {{- if $envcm_exists }}
             - configMapRef:
@@ -52,19 +57,25 @@ spec:
             - secretRef:
                 name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}-secret
                 optional: true
-          # ====== 혼용 포인트: 파일 마운트 (application.yaml 등) ======
+          {{/* # ====== 혼용 포인트: 파일 마운트 (application.yaml 등) ====== */}}
+          {{/* 파일 기반 ConfigMap이 있으면 /config 경로에 마운트하고 SPRING_CONFIG_ADDITIONAL_LOCATION 환경변수로 지정 */}}
           {{- if and .configMap .configMap.enabled .configMap.files }}
           env:
+            - name: SPRING_MAIN_WEB_APPLICATION_TYPE
+              value: "none"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: "/config/"
           volumeMounts:
             - name: config-volume
               mountPath: /config
               readOnly: true
-          {{- with .volumeMounts }}
-            {{- toYaml . | nindent 10 }}
-          {{- end }}
           {{- else }}
+          {{- with .env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
@@ -77,16 +88,20 @@ spec:
             limits:
               cpu:    {{ .resources.limits.cpu      | default "500m"  | quote }}
               memory: {{ .resources.limits.memory   | default "512Mi" | quote }}
-      {{- /* volumes: 파일 기반 ConfigMap일 때만 추가 */ -}}
+      {{/* volumes: 파일 기반 ConfigMap일 때만 추가 */}}
       {{- if and .configMap .configMap.enabled .configMap.files }}
       volumes:
         - name: config-volume
           configMap:
             name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
-      {{- end }}
+      {{- else }}
       {{- with .volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .volumeMounts (not .volumes) }}
+        {{- fail (printf "volumeMounts provided for %q but no matching 'volumes' defined (and no file-based ConfigMap in use)" .name) -}}
+      {{- end }}
       {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:

@@ -53,7 +53,7 @@ batchJobs:
   jobs:
     - name: batch-job-01
 
-      mode: cron         # job | cron | deployment 모드 선택
+      mode: job         # job | cron | deployment 모드 선택
 
       image: 
         repository: neo-batch-job
@@ -89,9 +89,9 @@ batchJobs:
         - name: SPRING_MAIN_WEB_APPLICATION_TYPE
           value: "none"
         - name: JAVA_TOOL_OPTIONS
-          value: "-XX:+ExitOnOutOfMemoryError -Xms256m -Xmx512m"
-        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+          value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
+        # - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+        #   value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
 
       # spring app 인 경우.
       # env: 
@@ -103,19 +103,19 @@ batchJobs:
       # 리소스 기본치
       resources:
         requests: { cpu: "250m", memory: "256Mi" }
-        limits:   { cpu: "500m", memory: "512Mi" }
+        limits:   { cpu: "500m", memory: "640Mi" }
 
       # resources:
       #   limits:
       #     cpu: 500m
-      #     memory: 512Mi
+      #     memory: 640Mi
       #   requests:
       #     cpu: 250m
       #     memory: 256Mi
 
       # 1회 실행 Job 전용(선택)
       job:
-        enabled: false
+        restartPolicy: OnFailure         # Job/CronJob인 경우 Never/OnFailure
         parallelism: 1
         completions: 1
         backoffLimit: 1
@@ -124,7 +124,7 @@ batchJobs:
 
       # 주기 실행 Cron 전용(선택)
       cron:
-        enabled: true
+        restartPolicy: OnFailure         # Job/CronJob인 경우 Never/OnFailure
         schedule: "*/5 * * * *"      # mode: cron일 때만 사용.
         # 5분 주기 (설정순서 : 분 시 일 월 요일)
         # 동일 시간 여러 job을 실행 시 부하 발생하기 때문에 특정 시간으로 나누워 시작 시.
@@ -147,7 +147,6 @@ batchJobs:
         failedJobsHistoryLimit: 1
 
       deployment:
-        enabled: false
         replicaCount: 1
         restartPolicy: Always   # Deployment의 Pod는 항상 Always. 
         # Job/CronJob인 경우 Never/OnFailure
@@ -200,7 +199,7 @@ batchJobs:
         - name: config-volume
           mountPath: /config          # 설정파일이 마운트될 경로
           readOnly: true              # 읽기 전용
-      volumes:
+      volumes:                        # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 valumes 둘 다 설정 필요.
         - name: config-volume
           configMap:                  # volumeMounts + volumes : application.yml 또는 application-prod.yml 등 Spring Boot 앱 설정파일을 Kubernetes ConfigMap으로 만들어서 Pod 내부에 마운트해 사용하기 위함 
             name: batch-job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다. 클러스터에 실제 존재해야 함.
@@ -234,7 +233,7 @@ batchJobs:
 
     - name: batch-job-02
 
-      mode: cron 
+      mode: deployment 
 
       image:
         repository: neo-batch-job
@@ -257,17 +256,18 @@ batchJobs:
         - name: SPRING_MAIN_WEB_APPLICATION_TYPE
           value: "none"
         - name: JAVA_TOOL_OPTIONS
-          value: "-XX:+ExitOnOutOfMemoryError -Xms256m -Xmx512m"
-        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+          value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
+        # - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+        #  value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
 
       # 리소스 기본치
       resources:
         requests: { cpu: "250m", memory: "256Mi" }
-        limits:   { cpu: "500m", memory: "512Mi" }
+        limits:   { cpu: "500m", memory: "640Mi" }
 
       # Job 전용(선택)
       job:
+        restartPolicy: OnFailure         # Job/CronJob인 경우 Never/OnFailure
         parallelism: 1
         completions: 1
         backoffLimit: 1
@@ -276,6 +276,7 @@ batchJobs:
 
       # Cron 전용(선택)
       cron:
+        restartPolicy: OnFailure         # Job/CronJob인 경우 Never/OnFailure
         schedule: "*/5 * * * *" 
         timeZone: "Asia/Seoul"
         concurrencyPolicy: "Forbid"
@@ -288,7 +289,7 @@ batchJobs:
         restartPolicy: Always # OnFailure : 실패 시 재 시작 (Job / Pod)
         
       service:
-        enabled: false    
+        enabled: true    
         type: ClusterIP 
         port: 8081
         # nodePort: 30081
@@ -368,7 +369,7 @@ batchTasks:
   enabled: true
   tasks:
     - name: batch-task-01
-      mode: cron
+      mode: task 
 
       image:
         repository: neo-batch-task
@@ -390,45 +391,43 @@ batchTasks:
         - name: SPRING_MAIN_WEB_APPLICATION_TYPE
           value: "none"
         - name: JAVA_TOOL_OPTIONS
-          value: "-XX:+ExitOnOutOfMemoryError -Xms256m -Xmx512m"
+          value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
         - name: SPRING_PROFILES_ACTIVE
           value: "local"
         - name: TASK_EXECUTION_ID
           value: "ID0001"
         - name: task_name
           value: "batch_task_01"
-        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+        # - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+        #  value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
 
       # 리소스 기본치
       resources:
         requests: { cpu: "250m", memory: "256Mi" }
-        limits:   { cpu: "500m", memory: "512Mi" }
+        limits:   { cpu: "500m", memory: "640Mi" }
 
       # Job 전용(선택)
-      job:
-        enabled: false
-        parallelism: 1
-        completions: 1
-        backoffLimit: 1
-        activeDeadlineSeconds: 680
-        ttlSecondsAfterFinished: 7200
+      task:
+        parallelism: 1                  # 병렬 실행 수
+        completions: 1                  # 완료 횟수
+        backoffLimit: 1                 # 재시도 횟수
+        activeDeadlineSeconds: 680      # 10분 상한(무한대기 방지)
+        ttlSecondsAfterFinished: 7200   # 완료 2h 후 정리
 
       # Cron 전용(선택)
       cron:
-        enabled: true
-        schedule: "*/5 * * * *"  # 5분 주기 (설정순서 : 분 시 일 월 요일)
-        timeZone: "Asia/Seoul"
-        concurrencyPolicy: "Forbid"
-        startingDeadlineSeconds: 120
-        successfulJobsHistoryLimit: 2
-        failedJobsHistoryLimit: 1
+        schedule: "*/5 * * * *"         # 5분 주기 (설정순서 : 분 시 일 월 요일)
+        timeZone: "Asia/Seoul"          # (k8s >= 1.27) 클러스터 타임존 사용. 미지원 버전이면 주석 처리 필요
+        concurrencyPolicy: "Forbid"     # 동시에 겹치는 실행 방지: Forbid(기본 권장) / Replace / Allow
+        startingDeadlineSeconds: 120    # 스케줄 지연 허용 시간(초). 지났으면 이번은 건너뜀(옵션)
+        successfulJobsHistoryLimit: 2   # 보관할 성공한 잡 기록 수
+        failedJobsHistoryLimit: 1       # 보관할 실패한 잡 기록 수 
 
       # Deployment 전용(선택)
       deployment:
-        enabled: false
         replicaCount: 1
-        restartPolicy: Always   # Job이 실패해도 자동 재시작하지 않음 (일회성 작업)
+        restartPolicy: Always           # Deployment의 Pod는 항상 Always여서, values에 다른 값 넣어도 의미가 없음.
+                                        # 템플릿에서 잘못 쓰면 검증에 걸릴 수 있으니 무시하거나 고정 권장
         
       service:
         enabled: false    # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요) 현재는 테스트 목적으로 true로 해서 테스트 해봄.
@@ -474,8 +473,8 @@ batchTasks:
       tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
         - key: "type"                 # 노드에 taint로 설정된 key
           operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-          value: "task"                # 해당 값이 "task"일 경우만 이 Pod는 스케줄링 허용됨
-          effect: "NoSchedule"       # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+          value: "task"               # 해당 값이 "task"일 경우만 이 Pod는 스케줄링 허용됨
+          effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
 
       volumeMounts:
         - name: config-volume
@@ -523,14 +522,20 @@ mysql:
     pullPolicy: IfNotPresent
 
   env:
-    - name: rootPassword
-      value: root
-    - name: database
+    - name: MYSQL_ROOT_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mysql-auth
+          key: root
+    - name: MYSQL_DATABASE
       value: demo
-    - name: username
+    - name: MYSQL_USER
       value: neodain
-    - name: password
-      value: Kht72@eye1
+    - name: MYSQL_PASSWORD    # value: Kht72@eye1
+      valueFrom:
+        secretKeyRef:
+          name: mysql-auth
+          key: userpass
 
   service:
     type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
@@ -584,14 +589,20 @@ mariadb:
     pullPolicy: IfNotPresent
 
   env:
-    - name: rootPassword
-      value: root
-    - name: database
+    - name: MARIADB_ROOT_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mysql-auth
+          key: root
+    - name: MARIADB_DATABASE
       value: demo
-    - name: username
+    - name: MARIADB_USER
       value: neodain
-    - name: password
-      value: Kht72@eye1
+    - name: MARIADB_PASSWORD    # value: Kht72@eye1
+      valueFrom:
+        secretKeyRef:
+          name: mysql-auth
+          key: userpass
 
   service:
     type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
@@ -654,7 +665,21 @@ influxdb:
     - name: DOCKER_INFLUXDB_INIT_BUCKET
       value: neodain
     - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
-      value: xxxxxxxxxxxxxxxx 
+      valueFrom:
+        secretKeyRef:
+          name: influxdb-auth
+          key: token
+          # secret 생성 예:
+          # kubectl create secret generic influxdb-auth --from-literal=token=xxxxxxxxxxxxxxxx
+          # kubectl create secret generic influxdb-auth --from-literal=token='<실제토큰>' -n <ns>
+          # 또는
+          # kubectl create secret generic influxdb-auth --from-literal=token=$(openssl rand -hex 16)
+          # 또는 (base64 인코딩된 값 사용 시)
+          # kubectl create secret generic influxdb-auth --from-literal=token=$(echo -n 'xxxxxxxxxxxxxxxx' | base64)
+          # kubectl get secret influxdb-admin-token-secret -o yaml
+          # data:
+          #   token: eHh4eHh4eHh4eHh4eHh4eHg=   # base64 인코딩된 값
+      # value: xxxxxxxxxxxxxxxx 
 
   service:
     type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
@@ -718,10 +743,11 @@ grafana:
 
   admin: 
     existingSecret: grafana-admin-secret   # 이 방식 권장
-    user: admin
-    password: admin
+    # user: admin
+    # password: admin
 
-  nodeSelector: { role: control }
+  nodeSelector:
+    role: control
 
   # Grafana의 Pod에 추가할 어노테이션(없으면 무시)
   podAnnotations: {}
@@ -778,7 +804,7 @@ grafana:
 
   # 환경변수로 InfluxDB 토큰 설정
   env:
-    - name: INFLUX_TOKEN
+    - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN 
       valueFrom:
         secretKeyRef:
           name: influxdb-auth
@@ -791,18 +817,21 @@ grafana:
       - scdf-monitoring-dashboards  # ConfigMap에 json 넣어두면 자동 로드
 
   # (선택) Grafana의 기본 대시보드 설정
-  # dashboardProviders:
-  #   dashboardproviders.yaml:
+  # dashboardsProvider:
+  #   enabled: true
+  #   configMaps:
+  #     - scdf-monitoring-dashboards  # ConfigMap에 json 넣어두면 자동 로드
+  #   dashboards.yaml:
   #     apiVersion: 1
   #     providers:
   #       - name: 'default'
   #         orgId: 1
-  #         folder: ''
   #         type: file
   #         disableDeletion: false
   #         editable: true
+  #         allowUiUpdates: true
   #         options:
-
+  #           path: /var/lib/grafana/dashboards
 
 # =========================
 # Prometheus
@@ -859,15 +888,29 @@ prometheus:
           - action: keep
             regex: true
             source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: (.+);(.+)
+            target_label: __address__
+            replacement: ${1}:${2}
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
             action: replace
             target_label: __metrics_path__
             regex: (.+)
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
-            action: replace
+      - job_name: 'skipper-server'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            regex: true
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: (.+);(.+)
             target_label: __address__
-            regex: (.*)
-            replacement: $1
+            replacement: ${1}:${2}
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
       - job_name: 'spring-boot-apps'
         kubernetes_sd_configs:
           - role: pod
@@ -875,13 +918,21 @@ prometheus:
           - action: keep
             regex: true
             source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: (.+);(.+)
+            target_label: __address__
+            replacement: ${1}:${2}
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
 
 
 # =========================
 # SCDF (Server + Skipper)
 # =========================
 scdf:
-  enabled: true
+  enabled: true 
   server:
     replicaCount: 1            # SCDF 서버는 단일 인스턴스로 운영
     image:
@@ -937,7 +988,8 @@ scdf:
       timeoutSeconds: 3
       failureThreshold: 6
 
-    nodeSelector: { role: control }
+    nodeSelector:
+      role: control
 
     podSecurityContext:
       enabled: true
@@ -947,8 +999,8 @@ scdf:
     containerSecurityContext: 
       enabled: true
       runAsUser: 1001
-      allowPrivilegeEscalation: true
-      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false # 권한 상승 금지 (필요 시 true, 보안 강화 시 false) 
+      readOnlyRootFilesystem: true  # 루트 파일시스템 읽기 전용 (/tmp 등, emptyDir 마운트 필요 여부 점검) 
 
     # Prometheus 스크랩 설정
     # SCDF 서버의 Actuator 엔드포인트를 Prometheus가 스크랩
@@ -975,7 +1027,7 @@ scdf:
 
 
   skipper:
-    enabled: true
+    enabled: true 
 
     replicaCount: 1            # Skipper 서버는 단일 인스턴스로 운영
     # Skipper는 SCDF의 배포/배치 관리 서버 역할
@@ -1023,7 +1075,8 @@ scdf:
       initialDelaySeconds: 20
       periodSeconds: 5
 
-    nodeSelector: { role: control }
+    nodeSelector:
+      role: control
 
     podSecurityContext:
       enabled: true
@@ -1033,7 +1086,8 @@ scdf:
     containerSecurityContext:
       enabled: true
       runAsUser: "1001"
-      allowPrivilegeEscalation: false
+      allowPrivilegeEscalation: false # 권한 상승 허용 (필요 시 true, 보안 강화 시 false) : scdf는 true로 설정
+      readOnlyRootFilesystem: true   # 루트 파일시스템 읽기 전용 (/tmp 등, emptyDir 마운트 필요 여부 점검)
 
     # Prometheus 스크랩 설정
     # Skipper의 Actuator 엔드포인트를 Prometheus가 스크랩

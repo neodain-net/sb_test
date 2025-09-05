@@ -1,7 +1,10 @@
-## templates/deployment.yaml (공통 템플릿)
 {{- $root := . }}
 {{- range .Values.batchTasks.tasks }}
-{{- if or (eq .mode "deployment") .deployment.enabled }}
+{{- if and (eq .mode "deployment") .service.enabled }}
+{{- $envcm := printf "%s-env" (include "batch-task.resname" (dict "root" $root "name" .name)) -}}
+{{- $envcm_exists := (or (and (hasKey . "datasource") .datasource)
+                         (and (hasKey . "datasource_sub") .datasource_sub)
+                         (hasKey . "influx")) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,7 +13,7 @@ metadata:
     {{- include "batch-task.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ .name }}
 spec:
-  replicas: {{ .replicaCount | default 1 }} 
+  replicas: {{ .deployment.replicaCount | default 1 }} 
   selector:
     matchLabels:
       {{- include "batch-task.selectorLabels" $root | nindent 6 }}
@@ -18,36 +21,34 @@ spec:
   template:
     metadata:
       labels:
+        {{- include "batch-task.labels" $root | nindent 8 }}
         {{- include "batch-task.selectorLabels" $root | nindent 8 }}
         app.kubernetes.io/component: {{ .name }}
+      {{ $anns := dict }}
+      {{- with .podAnnotations }}{{- $_ := merge $anns . -}}{{- end }}
+      {{- $_ := set $anns "checksum/config-env"  (include (print $.Template.BasePath "/configmap-env.yaml")  $root | sha256sum) -}}
+      {{- $_ := set $anns "checksum/config-file" (include (print $.Template.BasePath "/configmap-file.yaml") $root | sha256sum) -}}
+      annotations:
+        {{- toYaml $anns | nindent 12 }}
     spec:
       containers:
         - name: {{ .name }}
           image: "{{ .image.repository }}:{{ .image.tag }}"
           imagePullPolicy: {{ .image.pullPolicy | default "IfNotPresent" }}
-
-          {{- with .command }}   # // with를 사용할 경우, command 체크 후 내용 출력.
+          {{- with .command }} 
           command: {{ toJson . }}
           {{- end }}
-
           {{- with .args }}
           args:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
           envFrom:
-            - configMapRef:
-                name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-config
+            {{- if $envcm_exists }}
+            - configMapRef: { name: {{ $envcm }} }
+            {{- end }}
             - secretRef:
                 name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-secret
                 optional: true 
-                {{/* # Secret 없을 때도 기동되도록 완충 */}}
-
-          {{- with .env }}
-          env:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-
           {{- with .resources }}
           resources:
             requests:
@@ -57,47 +58,58 @@ spec:
               cpu: {{ .limits.cpu | default "500m" | quote }}
               memory: {{ .limits.memory | default "512Mi" | quote }}
           {{- end }}
-
+          {{- if and .configMap .configMap.enabled .configMap.files }}
+          env:
+            - name: SPRING_MAIN_WEB_APPLICATION_TYPE
+              value: "none"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "/config/"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+          {{- else }}
+          {{- with .env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
+          {{- end }}
           {{- with .livenessProbe }}
           livenessProbe:
             {{- toYaml .livenessProbe | nindent 12 }}
           {{- end }}
-
           {{- with .readinessProbe }}
           readinessProbe:
             {{- toYaml .readinessProbe | nindent 12 }}
           {{- end }}
-      {{- with .volumes }}   
-      # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 
-      # valumes 둘 다 설정 필요.
-      volumes:
-        {{- toYaml . | nindent 12 }}
-      {{/*
+      {{- if and .configMap .configMap.enabled .configMap.files }}   
       volumes:
         - name: config-volume
           configMap:
-            name: {{ .configMap.name | default (printf "%s-config" (include "batch-job.resname" (dict "root" $root "name" .name))) }}
-      */}}
+            name: {{ .configMap.name | default (printf "%s-config" (include "batch-task.resname" (dict "root" $root "name" .name))) }}
+      {{- else }}
+      {{- with .volumes }}   
+      volumes:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
-
-      restartPolicy:
-        {{ .restartPolicy | default "Always" }} 
-
+      {{- if and .volumeMounts (not .volumes) }}
+        {{- fail (printf "volumeMounts provided for %q but no matching 'volumes' defined (and no file-based ConfigMap in use)" .name) -}}
+      {{- end }}            
+      {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
       {{- end }}
-
       {{- with .affinity }}
       affinity:
         {{- toYaml . | nindent 8 }} 
       {{- end }}
-
       {{- with .tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

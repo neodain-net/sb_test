@@ -135,3 +135,11 @@ imagePullSecrets:
 {{- define "batch-infra.prometheus.configName" -}}
 {{ printf "%s-config" (include "batch-infra.prometheus.name" .) | trunc 63 | trimSuffix "-" }}
 {{- end -}}
+
+{{- define "batch-infra.grafana.datasources" -}}
+{{- index .Values.grafana.datasources "datasources.yaml" | default "" -}}
+{{- end -}}
+
+{{- define "batch-infra.grafana.dashboardsProvider" -}}
+{{- index .Values.grafana.dashboardsProvider "dashboards.yaml" | default "" -}}
+{{- end -}}

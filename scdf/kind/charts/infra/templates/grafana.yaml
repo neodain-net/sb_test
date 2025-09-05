@@ -1,32 +1,32 @@
 {{- if .Values.grafana.enabled }}
 {{- $name := include "batch-infra.grafana.name" . -}}
-# --- Grafana Deployment
-
-{{- /* === 1) annotations 맵을 먼저 조립 (global + local + checksum) === */ -}}
+{{/* === 1) annotations 맵을 먼저 조립 (global + local + checksum) === */}}
 {{- $ann := dict -}}
 {{- $ann = merge $ann (default (dict) .Values.global.podAnnotations) -}}
 {{- $ann = merge $ann (default (dict) .Values.grafana.podAnnotations) -}}
-{{- if and .Values.grafana.datasources (hasKey .Values.grafana.datasources "datasources.yaml") -}}
-  {{- $ds := index .Values.grafana.datasources "datasources.yaml" -}}
-  {{- $_ := set $ann "checksum/datasources" (toYaml $ds | sha256sum) -}}
-{{- end -}}
+{{- if and .Values.grafana.datasources (hasKey .Values.grafana.datasources "datasources.yaml") }}
+{{- $_  := set $ann "checksum/datasources"         (include "batch-infra.grafana.datasources" .        | toJson | sha256sum) -}}
+{{- end }}
+{{- if and .Values.grafana.dashboardsProvider (hasKey .Values.grafana.dashboardsProvider "dashboards.yaml") }}
+{{- $_  := set $ann "checksum/dashboards-provider" (include "batch-infra.grafana.dashboardsProvider" . | toJson | sha256sum) -}}
+{{- end }}
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}
   labels: 
-{{ include "batch-infra.labels" . | nindent 4 }}
+    {{ include "batch-infra.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.grafana.replicaCount | default 1 }}
   selector:
     matchLabels:
-{{ include "batch-infra.selectorLabels" . | nindent 6 }}
+      {{ include "batch-infra.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/name: {{ $name }}
   template:
     metadata:
       labels:
- {{ include "batch-infra.selectorLabels" . | nindent 8 }}
+        {{ include "batch-infra.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/name: {{ $name }}
       {{- if gt (len $ann) 0 }}
       annotations:
@@ -36,15 +36,15 @@ spec:
       {{- include "batch-infra.imagePullSecrets" . | nindent 6 }}
       {{- with .Values.grafana.nodeSelector }}
       nodeSelector: 
-{{- toYaml . | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.grafana.affinity }}
       affinity: 
-{{- toYaml . | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.grafana.tolerations }}
       tolerations: 
-{{- toYaml . | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: grafana
@@ -68,15 +68,11 @@ spec:
             - name: GF_SECURITY_ADMIN_PASSWORD
               value: {{ .Values.grafana.admin.password | default "admin" | quote }}
             {{- end }}
-            {{- range .Values.grafana.env }}
-            - name: {{ .name }}
-              {{- if .valueFrom }}
+            - name: INFLUX_TOKEN      
               valueFrom: 
-{{- toYaml .valueFrom | nindent 16 }}
-              {{- else }}
-              value: {{ .value | quote }}
-              {{- end }}
-            {{- end }}
+                secretKeyRef: 
+                  name: influxdb-auth
+                  key: token
           ports: [ { name: http, containerPort: {{ .Values.grafana.service.port | default 3000 }} } ]
           livenessProbe:  { httpGet: { path: /api/health, port: http }, initialDelaySeconds: 30, periodSeconds: 10 }
           readinessProbe: { httpGet: { path: /api/health, port: http }, initialDelaySeconds: 10, periodSeconds: 5 }
@@ -111,17 +107,18 @@ spec:
             {{- end }}
         {{- end }}
 ---
+
 # --- Grafana Service
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name }}
   labels: 
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.grafana.service.type | default "ClusterIP" }}
   selector:
-{{- include "batch-infra.selectorLabels" . | nindent 4 }}
+    {{- include "batch-infra.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/name: {{ $name }}
   ports:
     - name: http
@@ -130,30 +127,35 @@ spec:
       {{- if eq (.Values.grafana.service.type | default "ClusterIP") "NodePort" }}
       nodePort: {{ .Values.grafana.service.nodePort | default 31000 }}
       {{- end }}
+
 {{- if .Values.grafana.datasources }}
 ---
+
 # --- Grafana Datasources (ConfigMap)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "batch-infra.grafana.datasources.configName" . }}
   labels: 
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 data:
   datasources.yaml: |
 {{ toYaml (index .Values.grafana.datasources "datasources.yaml") | indent 4 }}
 {{- end }}
+
 {{- if .Values.grafana.dashboardsProvider.enabled }}
 ---
+
 # --- Grafana Dashboards Provider (ConfigMap)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ printf "%s-dashboards-provider" $name }}
   labels: 
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 data:
   dashboards.yaml: |
+{{ include "batch-infra.grafana.dashboardsProvider" . | nindent 4 }}
     apiVersion: 1
     providers:
       - name: 'default'
@@ -164,16 +166,19 @@ data:
         allowUiUpdates: true
         options:
           path: /var/lib/grafana/dashboards
+
 {{- end }}
+
 {{- if .Values.grafana.persistence.enabled }}
 ---
+
 # --- Grafana PVC
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "batch-infra.grafana.pvcName" . }}
   labels: 
-{{- include "batch-infra.labels" . | nindent 4 }}
+    {{- include "batch-infra.labels" . | nindent 4 }}
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: {{ .Values.grafana.persistence.storageClass | default "standard" }}
