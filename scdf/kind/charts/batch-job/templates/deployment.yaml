@@ -28,6 +28,7 @@ spec:
       {{- with .podAnnotations }}{{- $_ := merge $anns . -}}{{- end }}
       {{- $_ := set $anns "checksum/config-env"  (include (print $.Template.BasePath "/configmap-env.yaml")  $root | sha256sum) -}}
       {{- $_ := set $anns "checksum/config-file" (include (print $.Template.BasePath "/configmap-file.yaml") $root | sha256sum) -}}
+      {{- $_ := set $anns "checksum/secret" (include (print $.Template.BasePath "/secret-env.yaml") $root | sha256sum) -}}
       annotations:
         {{- toYaml $anns | nindent 8 }}
     spec:

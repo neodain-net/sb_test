@@ -33,7 +33,9 @@ spec:
           env:
             {{- toYaml . | nindent 12 -}}
           {{- end }}
-          ports: [ { name: mysql, containerPort: {{ .Values.mysql.service.port | default 3306 }} } ]
+          ports: 
+            - name: mysql
+              containerPort: {{ .Values.mysql.service.port | default 3306 }} 
           livenessProbe:
             exec: { command: ["sh","-c","mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD"] }
             initialDelaySeconds: 30

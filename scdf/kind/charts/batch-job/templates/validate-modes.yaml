@@ -6,7 +6,6 @@
   {{- $name := default (printf "item-%d" $idx) $it.name -}}
   {{- $mode := default "" $it.mode -}}
 
-  {{- /* Hard gate: exactly one of job|cron|deployment via mode */ -}}
   {{- $wantJob  := eq $mode "job" -}}
   {{- $wantCron := eq $mode "cron" -}}
   {{- $wantDep  := eq $mode "deployment" -}}
@@ -19,7 +18,6 @@
     {{- fail (printf "batch-job: '%s' must set exactly one mode to 'job' | 'cron' | 'deployment' (got mode=%q)" $name $mode) -}}
   {{- end -}}
 
-  {{- /* Per-mode required fields */ -}}
   {{- if $wantCron -}}
     {{- if not (and $it.cron $it.cron.schedule) -}}
       {{- fail (printf "batch-job: '%s' mode=cron requires .cron.schedule (crontab) in values" $name) -}}

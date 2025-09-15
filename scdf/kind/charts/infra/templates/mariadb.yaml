@@ -33,7 +33,9 @@ spec:
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          ports: [ { name: mariadb, containerPort: {{ .Values.mariadb.service.port | default 3306 }} } ]
+          ports: 
+            - name: mariadb
+              containerPort: {{ .Values.mariadb.service.port | default 3306 }}
           livenessProbe:
             exec: { command: ["sh","-c","mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"] }
             initialDelaySeconds: 30
@@ -41,7 +43,8 @@ spec:
             exec: { command: ["sh","-c","mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"] }
             initialDelaySeconds: 15
           volumeMounts:
-            - { name: data, mountPath: {{ .Values.mariadb.persistence.mountPath | default "/var/lib/mysql" }} }
+            - name: data
+              mountPath: {{ .Values.mariadb.persistence.mountPath | default "/var/lib/mysql" }}
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -32,11 +32,18 @@ spec:
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          ports: [ { name: http, containerPort: {{ .Values.influxdb.service.port | default 8086 }} } ]
-          livenessProbe:  { httpGet: { path: /health, port: http }, initialDelaySeconds: 20 }
-          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
+          ports: 
+            - name: http
+              containerPort: {{ .Values.influxdb.service.port | default 8086 }} 
+          livenessProbe:  
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 20
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10 
           volumeMounts:
-            - { name: data, mountPath: {{ .Values.influxdb.persistence.mountPath | default "/var/lib/influxdb2" }} }
+            - name: data
+              mountPath: {{ .Values.influxdb.persistence.mountPath | default "/var/lib/influxdb2" }}
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -143,3 +143,27 @@ imagePullSecrets:
 {{- define "batch-infra.grafana.dashboardsProvider" -}}
 {{- index .Values.grafana.dashboardsProvider "dashboards.yaml" | default "" -}}
 {{- end -}}
+
+# named templates for grafana configmaps 
+{{- define "batch-infra.named.grafana.datasources" -}}
+apiVersion: 1
+datasources:
+- access: proxy
+  isDefault: true
+  name: Prometheus
+  type: prometheus
+  url: http://{{ include "batch-infra.resname" (dict "root" . "name" "prometheus") }}:9090
+{{- end -}}
+
+{{- define "batch-infra.named.grafana.dashboardsProvider" -}}
+apiVersion: 1
+providers:
+  - name: 'default'
+    orgId: 1
+    type: file
+    disableDeletion: false
+    editable: true
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+{{- end -}}

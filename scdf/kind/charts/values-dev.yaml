@@ -53,7 +53,7 @@ batchJobs:
   jobs:
     - name: batch-job-01
 
-      mode: job         # job | cron | deployment 모드 선택
+      mode: cron         # job | cron | deployment 모드 선택, job/cron은 단발성 실행, deployment는 지속 실행으로 service 필요할 수 있음.
 
       image: 
         repository: neo-batch-job
@@ -180,6 +180,7 @@ batchJobs:
 
       nodeSelector:                   # 해당 Pod가 배치될 Node를 label로 지정
         role: work-1                  # label key: 'role', value: 'work-1' 인 노드에만 배치
+
       affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -199,10 +200,12 @@ batchJobs:
         - name: config-volume
           mountPath: /config          # 설정파일이 마운트될 경로
           readOnly: true              # 읽기 전용
+
       volumes:                        # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 valumes 둘 다 설정 필요.
         - name: config-volume
           configMap:                  # volumeMounts + volumes : application.yml 또는 application-prod.yml 등 Spring Boot 앱 설정파일을 Kubernetes ConfigMap으로 만들어서 Pod 내부에 마운트해 사용하기 위함 
             name: batch-job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다. 클러스터에 실제 존재해야 함.
+
       configMap:                      # ConfigMap 만드는 방법 : kubectl create configmap batch-job-01-config --from-file=application.yml (이후, Helm에서는 configMap.name: batch-job-01-config으로 참조하면 된다)
         enabled: true                 # false 면 Helm이 ConfigMap을 만들지 않음. true로 해야 아래 name/files 옵션이 적용됨.
         name: batch-job-01-config
@@ -233,7 +236,7 @@ batchJobs:
 
     - name: batch-job-02
 
-      mode: deployment 
+      mode: cron 
 
       image:
         repository: neo-batch-job
@@ -289,7 +292,7 @@ batchJobs:
         restartPolicy: Always # OnFailure : 실패 시 재 시작 (Job / Pod)
         
       service:
-        enabled: true    
+        enabled: false    
         type: ClusterIP 
         port: 8081
         # nodePort: 30081
@@ -369,7 +372,7 @@ batchTasks:
   enabled: true
   tasks:
     - name: batch-task-01
-      mode: task 
+      mode: cron   # job | cron | deployment 모드 선택, job/cron은 단발성 실행, deployment는 지속 실행으로 service 필요할 수 있음. 
 
       image:
         repository: neo-batch-task
@@ -461,6 +464,7 @@ batchTasks:
 
       nodeSelector:
         role: work-2
+
       affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -473,7 +477,7 @@ batchTasks:
       tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
         - key: "type"                 # 노드에 taint로 설정된 key
           operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-          value: "task"               # 해당 값이 "task"일 경우만 이 Pod는 스케줄링 허용됨
+          value: "task"                # 해당 값이 "task"경우만 이 Pod는 스케줄링 허용됨
           effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
 
       volumeMounts:
@@ -571,7 +575,7 @@ mysql:
                 - work-1          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함 
 
   tolerations:
-    - key: "role"                 # 노드에 taint로 설정된 key
+    - key: "type"                 # 노드에 taint로 설정된 key
       operator: "Equal"           # 정확히 일치하는 값일 때만 허용
       value: "work-1"             # 해당 값이 "work-1"일 경우만 이 Pod는 스케줄링 허용됨
       effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
@@ -636,7 +640,7 @@ mariadb:
                 - work-2          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함 
 
   tolerations:
-    - key: "role"                 # 노드에 taint로 설정된 key
+    - key: "type"                 # 노드에 taint로 설정된 key
       operator: "Equal"           # 정확히 일치하는 값일 때만 허용
       value: "work-2"             # 해당 값이 "work-2"일 경우만 이 Pod는 스케줄링 허용됨
       effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨 
@@ -713,10 +717,16 @@ influxdb:
                 - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
 
   tolerations:
-    - key: "role"                 # 노드에 taint로 설정된 key
-      operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-      value: "control"            # 해당 값이 "control"일 경우만 이 Pod는 스케줄링 허용됨
-      effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨 
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master    # (구버전 호환)
+      operator: Exists
+      effect: NoSchedule
+    # - key: "role"                 # 노드에 taint로 설정된 key
+    #   operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+    #   value: "control"            # 해당 값이 "control"일 경우만 이 Pod는 스케줄링 허용됨
+    #   effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨 
 
 
 # =========================
@@ -768,10 +778,16 @@ grafana:
                 - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
 
   tolerations:
-    - key: "role"                 # 노드에 taint로 설정된 key
-      operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-      value: "control"            # 해당 값이 "control"일 경우만 이 Pod는 스케줄링 허용됨
-      effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master    # (구버전 호환)
+      operator: Exists
+      effect: NoSchedule
+    # - key: "role"                 # 노드에 taint로 설정된 key
+    #   operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+    #   value: "control"            # 해당 값이 "control"일 경우만 이 Pod는 스케줄링 허용됨
+    #   effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
 
   # 데이터소스 프로비저닝 (InfluxDB v2 / Prometheus)
   # Grafana는 기본으론 “빈 상태”로 뜨고, UI에서 수동으로 Prometheus/InfluxDB 같은 데이터소스를 등록해야 됨.
@@ -804,7 +820,8 @@ grafana:
 
   # 환경변수로 InfluxDB 토큰 설정
   env:
-    - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN 
+    # - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN 
+    - name: INFLUX_TOKEN 
       valueFrom:
         secretKeyRef:
           name: influxdb-auth
@@ -864,20 +881,38 @@ prometheus:
       - --storage.tsdb.retention.time=15d
       - --storage.tsdb.retention.size=8GB
 
-    nodeSelector: { role: control }
-
     # (선택) 서비스 타입 – 템플릿에서 dig로 조회 (미지정 시 ClusterIP)
     service:
       port: 9090
       type: ClusterIP
-      # nodePort: 32090   # NodePort는 30000 ~ 32767 범위만 허용, 생략 시 k8s에서 자동 할당. 
-  
-      # nodePort: 30090
+      # nodePort: 31090   # NodePort는 30000 ~ 32767 범위만 허용, 생략 시 k8s에서 자동 할당. 
 
     # (선택) 파드 어노테이션 추가 지점(없으면 무시)
     podAnnotations: {}
-    affinity: {}
-    tolerations: []
+
+    # 1) control 노드로 보내기
+    nodeSelector:
+      role: control
+
+    # 2) control-plane 기본 taint 허용 (레거시 master도 함께 허용)
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master   # 레거시 호환(있으면 통과)
+        operator: Exists
+        effect: NoSchedule
+
+    # 3) control 노드에만 배치, affinity는 nodeSelector보다 우선함. 좀더 정교한 배치 정책 가능.
+    #    nodeSelector와 중복 설정 시 충돌 가능성 있음. 따라서 둘 중 하나만 설정 권장. 생략 가능 
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: role
+                  operator: In
+                  values: ["control"]
 
     # SCDF/Skipper/배치앱 스크랩 설정(Actuator /actuator/prometheus)
     extraScrapeConfigs:
@@ -1020,14 +1055,20 @@ scdf:
                   - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
     
     tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
-      - key: "type"                 # 노드에 taint로 설정된 key  
-        operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-        value: "scdf"               # 해당 값이 "scdf"일 경우만 이 Pod는 스케줄링 허용됨
-        effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master    # (구버전 호환)
+        operator: Exists
+        effect: NoSchedule
+      # - key: "role"                 # 노드에 taint로 설정된 key  
+      #   operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+      #   value: "control"            # 해당 값이 "scdf"일 경우만 이 Pod는 스케줄링 허용됨
+      #   effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
 
 
   skipper:
-    enabled: true 
+    enabled: false 
 
     replicaCount: 1            # Skipper 서버는 단일 인스턴스로 운영
     # Skipper는 SCDF의 배포/배치 관리 서버 역할
@@ -1107,10 +1148,16 @@ scdf:
                   - control          # 이 조건은 nodeSelector와 동일한 효과지만 더 유연함
 
     tolerations:                    # Taints가 걸린 노드에도 해당 조건을 만족하면 배치 허용
-      - key: "type"                 # 노드에 taint로 설정된 key
-        operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-        value: "skipper"            # 해당 값이 "skipper"일 경우만 이 Pod는 스케줄링 허용됨
-        effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master    # (구버전 호환)
+        operator: Exists
+        effect: NoSchedule
+      # - key: "role"                 # 노드에 taint로 설정된 key
+      #   operator: "Equal"           # 정확히 일치하는 값일 때만 허용
+      #   value: "control"            # 해당 값이 "skipper"일 경우만 이 Pod는 스케줄링 허용됨
+      #   effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
 
   # --- SCDF 기능 플래그 ---
   features:

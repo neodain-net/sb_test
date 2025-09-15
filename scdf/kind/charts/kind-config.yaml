@@ -1,55 +1,87 @@
 # kind-config.yaml
-# Kind 클러스터 설정 - control-plane 1개, worker 노드 2개 
-# 배치 작업(Job과 Task)가 각기 다른 워커 노드에 배치되도록 세분화
+# Kind cluster: 1 control-plane + 2 workers
+# - control-plane: NodePort 접근용 포트 매핑만, 기본 테인트 유지
+# - worker-1: role=work-1,type=job + taint type=job:NoSchedule
+# - worker-2: role=work-2,type=task + taint type=task:NoSchedule
+
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+
 nodes:
-  - role: control
+  # ---------------------------
+  # Control-plane
+  # ---------------------------
+  - role: control-plane
+    image: kindest/node:v1.33.1@sha256:050072256b9a903bd914c0b2866828150cb229cea0efe5892e2b644d5dd3b34f
+    # NodePort(30000~32767)를 호스트로 바로 열어 테스트 편의 확보
     extraPortMappings:
-      # Grafana (31000), SCDF (31093), Skipper (30097), InfluxDB (31086), Prometheus(31090)
-      # Kind는 NodePort범위(30000~32767) 내에서 접근할 수 있어야 외부(로컬)에서 curl 및 브라우저 접근이 가능.
-      # Ingress Controller를 이용할 경우(예 : NGINX + TLS) 통합 라우팅하면 30000만 외부에 열고 내부적으로 라우팅할 수도 있음.
-      - containerPort: 31000 # Grafana
+      - containerPort: 31000   # Grafana
         hostPort: 31000
         protocol: TCP
-      - containerPort: 31090 # Prometheus
+      - containerPort: 31090   # Prometheus
         hostPort: 31090
         protocol: TCP
-      - containerPort: 31093 # SCDF 
-        hostPort: 31093
+      - containerPort: 32080   # SCDF Server
+        hostPort: 32080
         protocol: TCP
-      - containerPort: 31086 # Influx db
-        hostPort: 31086
+      - containerPort: 32081   # Skipper
+        hostPort: 32081
         protocol: TCP
-      - containerPort: 31097 # Skipper 
-        hostPort: 31097
+      - containerPort: 30086   # InfluxDB
+        hostPort: 30086
         protocol: TCP
-  - role: worker-1
-    labels:
-      role: work-1   # work-1로 레이블 설정
-      type: job
-    extraPortMappings:
-      - containerPort: 9091
-        hostPort: 9091
-        protocol: TCP
-    taints:
-      - key: "type"
-        value: "job"
-        effect: "NoSchedule"
-  - role: worker-2
-    labels:
-      role: work-2   # work-2로 레이블 설정
-      type: task
-    extraPortMappings:
-      - containerPort: 9092
-        hostPort: 9092
-        protocol: TCP
-    taints:
-      - key: "type"
-        value: "task"
-        effect: "NoSchedule"
 
-# 주의사항:
-# - worker-1 (job-worker): 배치 작업용 Job 10개
-# - worker-2 (task-worker): SCDF Task 10개
-# - 노드에서 작업을 구분하기 위해 labels로 worker 노드의 역할 구분
+    # ⚠️ 기본 control-plane 테인트는 그대로 둡니다.
+    #    파드(Deployment 등) 쪽에서 tolerations:
+    #      - key: "node-role.kubernetes.io/control-plane"
+    #        operator: "Exists"
+    #        effect: "NoSchedule"
+    #    로 허용하도록 차트에 이미 반영한 설계 유지.
+
+  # ---------------------------
+  # Worker #1  (job 전용)
+  # ---------------------------
+  - role: worker
+    image: kindest/node:v1.33.1@sha256:050072256b9a903bd914c0b2866828150cb229cea0efe5892e2b644d5dd3b34f
+    # labels: // kind cluster에서는 labels 설정이 안먹음
+    #   role: work-1
+    #   type: job
+    # kubeadmConfigPatches: // kind cluster에서는 taint 설정이 안먹음
+    #   - |
+    #     apiVersion: kubeadm.k8s.io/v1beta4
+    #     kind: JoinConfiguration
+    #     nodeRegistration:
+    #       kubeletExtraArgs:
+    #         node-labels: "role=work-1,type=job"
+    #       taints:
+    #         - key: "type"
+    #           value: "job"
+    #           effect: "NoSchedule"
+    extraPortMappings:
+      - containerPort: 30306   # MySQL NodePort (옵션)
+        hostPort: 30306
+        protocol: TCP
+
+  # ---------------------------
+  # Worker #2  (task 전용)
+  # ---------------------------
+  - role: worker
+    image: kindest/node:v1.33.1@sha256:050072256b9a903bd914c0b2866828150cb229cea0efe5892e2b644d5dd3b34f
+    # labels:
+    #   role: work-2
+    #   type: task
+    # kubeadmConfigPatches:
+    #   - |
+    #     apiVersion: kubeadm.k8s.io/v1beta4
+    #     kind: JoinConfiguration
+    #     nodeRegistration:
+    #       kubeletExtraArgs:
+    #         node-labels: "role=work-2,type=task"
+    #       taints:
+    #         - key: "type"
+    #           value: "task"
+    #           effect: "NoSchedule"
+    extraPortMappings:
+      - containerPort: 30307   # MariaDB NodePort (옵션)
+        hostPort: 30307
+        protocol: TCP

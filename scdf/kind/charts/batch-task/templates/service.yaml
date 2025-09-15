@@ -18,9 +18,7 @@ spec:
       port: {{ .service.port }}
       targetPort: {{ .service.targetPort | default .service.port }}
       {{- if and (eq (.service.type | default "ClusterIP") "NodePort") .service.nodePort }}
-      {{/* 서비스 타입이 NodePort이고 nodePort 숫자도 지정돼 있을 때만 nodePort: 라인을 출력하자는 조건문 */}}
       nodePort: {{ .service.nodePort }}
-      {{/* nodePort: {{ add .service.nodePort }} # nodePort는 30000–32767 내에서만! */}}
       {{- end }}
 {{- end }}
 {{- end }}
