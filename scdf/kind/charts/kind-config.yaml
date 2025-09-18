@@ -15,18 +15,18 @@ nodes:
     image: kindest/node:v1.33.1@sha256:050072256b9a903bd914c0b2866828150cb229cea0efe5892e2b644d5dd3b34f
     # NodePort(30000~32767)를 호스트로 바로 열어 테스트 편의 확보
     extraPortMappings:
-      - containerPort: 31000   # Grafana
-        hostPort: 31000
-        protocol: TCP
-      - containerPort: 31090   # Prometheus
-        hostPort: 31090
-        protocol: TCP
-      - containerPort: 32080   # SCDF Server
-        hostPort: 32080
-        protocol: TCP
-      - containerPort: 32081   # Skipper
-        hostPort: 32081
-        protocol: TCP
+      # - containerPort: 31000   # Grafana
+      #   hostPort: 31000
+      #   protocol: TCP
+      # - containerPort: 31090   # Prometheus
+      #   hostPort: 31090
+      #   protocol: TCP
+      # - containerPort: 32080   # SCDF Server
+      #   hostPort: 32080
+      #   protocol: TCP
+      # - containerPort: 32081   # Skipper
+      #   hostPort: 32081
+      #   protocol: TCP
       - containerPort: 30086   # InfluxDB
         hostPort: 30086
         protocol: TCP

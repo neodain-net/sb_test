@@ -21,10 +21,6 @@ spec:
       annotations:
         {{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mariadb.podAnnotations) | nindent 8 }}
     spec:
-      {{- with .Values.mariadb.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       containers:
         - name: mariadb
           image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.mariadb.image.repository "tag" .Values.mariadb.image.tag) }}
@@ -45,6 +41,18 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.mariadb.persistence.mountPath | default "/var/lib/mysql" }}
+      {{- with .Values.mariadb.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mariadb.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mariadb.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data

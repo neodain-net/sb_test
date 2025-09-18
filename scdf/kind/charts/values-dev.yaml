@@ -298,8 +298,8 @@ batchJobs:
         # nodePort: 30081
 
       datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://job02-datasource.default.svc.cluster.local:3306/jobdb
+        driver_class_name: org.mariadb.jdbc.Driver
+        url: jdbc:mariadb://job01-datasource.default.svc.cluster.local:3306/jobdb
         username: user
         password: root
       datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
@@ -577,7 +577,7 @@ mysql:
   tolerations:
     - key: "type"                 # 노드에 taint로 설정된 key
       operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-      value: "work-1"             # 해당 값이 "work-1"일 경우만 이 Pod는 스케줄링 허용됨
+      value: "job"             # 해당 값이 "work-1"일 경우만 이 Pod는 스케줄링 허용됨
       effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨
 
 
@@ -642,7 +642,7 @@ mariadb:
   tolerations:
     - key: "type"                 # 노드에 taint로 설정된 key
       operator: "Equal"           # 정확히 일치하는 값일 때만 허용
-      value: "work-2"             # 해당 값이 "work-2"일 경우만 이 Pod는 스케줄링 허용됨
+      value: "task"             # 해당 값이 "work-2"일 경우만 이 Pod는 스케줄링 허용됨
       effect: "NoSchedule"        # taint가 NoSchedule 일 때 이 toleration이 없으면 배치 안 됨 
 
 
@@ -733,7 +733,7 @@ influxdb:
 # Grafana
 # =========================
 grafana:
-  enabled: true
+  enabled: false 
   replicaCount: 1            # Grafana는 단일 인스턴스로 운영
   image:
     repository: grafana/grafana
@@ -854,7 +854,7 @@ grafana:
 # Prometheus
 # =========================
 prometheus:
-  enabled: true
+  enabled: false 
   replicaCount: 1            # Prometheus는 단일 인스턴스로 운영         
   image:
     repository: bitnami/prometheus 
@@ -967,7 +967,7 @@ prometheus:
 # SCDF (Server + Skipper)
 # =========================
 scdf:
-  enabled: true 
+  enabled: false 
   server:
     replicaCount: 1            # SCDF 서버는 단일 인스턴스로 운영
     image:

@@ -20,10 +20,6 @@ spec:
       annotations:
         {{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.influxdb.podAnnotations) | nindent 8 }}
     spec:
-      {{- with .Values.influxdb.nodeSelector }}
-      nodeSelector: 
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       containers:
         - name: influxdb
           image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.influxdb.image.repository "tag" .Values.influxdb.image.tag) }}
@@ -44,6 +40,18 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.influxdb.persistence.mountPath | default "/var/lib/influxdb2" }}
+      {{- with .Values.influxdb.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.influxdb.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.influxdb.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data

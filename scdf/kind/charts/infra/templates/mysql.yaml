@@ -21,10 +21,6 @@ spec:
       annotations:
         {{- include "batch-infra.mergePodAnnotations" (dict "root" . "local" .Values.mysql.podAnnotations) | nindent 8 }}
     spec:
-      {{- with .Values.mysql.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       containers:
         - name: mysql
           image: {{ include "batch-infra.image" (dict "root" . "repo" .Values.mysql.image.repository "tag" .Values.mysql.image.tag) }}
@@ -45,6 +41,18 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.mysql.persistence.mountPath | default "/var/lib/mysql" }}
+      {{- with .Values.mysql.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mysql.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mysql.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data
