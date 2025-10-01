@@ -51,12 +51,12 @@ global:
 batchJobs:
   enabled: true
   jobs:
-    - name: batch-job-01
+    - name: job-01
 
-      mode: cron         # job | cron | deployment 모드 선택, job/cron은 단발성 실행, deployment는 지속 실행으로 service 필요할 수 있음.
+      mode: deployment         # job | cron | deployment 모드 선택, job/cron은 단발성 실행, deployment는 지속 실행으로 service 필요할 수 있음.
 
       image: 
-        repository: neo-batch-job
+        repository: neo-job
         tag: "0.0.1"
         pullPolicy: IfNotPresent
         # Always : 매번 새 이미지 Pull (latest 태그나 개발 환경에서)
@@ -76,22 +76,31 @@ batchJobs:
       # command: ["java", "-jar", "/app/app.jar"] // 보통은 docker images에 ENTRYPOINT가 포함되어 있기 때문에 이 부분을 생략한다.
       
       args:
-        - "--spring.profiles.active=dev"
+        # - "--spring.profiles.active=local"
         - "--spring.config.additional-location=/config/" # Spring batch-job이 ConfigMap으로 마운트한 설정파일 읽기
-        - "--rtm.batch.job.start=202507091730"
-        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.date=20250929"
+        - "--rtm.batch.job.start=14050000"
+        - "--rtm.batch.job.end=14100000"
         - "--rtm.batch.job.chunk=200"
         - "--rtm.batch.job.interval=10"
         - "--rtm.batch.job.delay=5"
 
-      # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료
       env:
+        # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료(none : 웹 비활성, servlet : 웹 활성)
         - name: SPRING_MAIN_WEB_APPLICATION_TYPE
-          value: "none"
-        - name: JAVA_TOOL_OPTIONS
-          value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-        # - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-        #   value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+          value: "servlet"
+          # value: "none" # none : 웹 비활성, servlet : 웹 활성
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+        - name: SERVER_PORT   # Spring Boot 앱이 웹 서버를 실행하는 경우 포트 지정 (Non app이면 불필요)
+          value: "8080"
+        - name: INFLUX_TOKEN 
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-auth
+              key: token 
+        # - name: JAVA_TOOL_OPTIONS
+        #   value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
 
       # spring app 인 경우.
       # env: 
@@ -155,30 +164,47 @@ batchJobs:
         # Never : 절대 재 시작 안함 (Job / Pod)
       
       service:             # Job/Task는 단발성 실행이므로 보통 Service는 필요 없음. Deployment 모드로 실행하는 경우에만 Service가 필요할 수 있음.
-        enabled: false     # false 인 경우 Service는 필요 없음 (job/task는 단발성 실행이므로 통신 노출 불필요)
+        enabled: true     # false 인 경우 Service는 필요 없음 (job/task는 단발성 실행이므로 통신 노출 불필요)
         type: ClusterIP    # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능 : 마이크로서비스끼리의 통신용)
         port: 8080         # 기본 서비스(db등) 포트로 클러스터 안에서 서비스가 노출되는 가상 포트 (이외에, targetPort : Pod 컨테이너 포트)
         # nodePort: 30080  # NodePort는 30000 ~ 32767 범위만 허용, 생략 시 k8s에서 자동 할당. 중복 설정하면 안되는 포트번호. kind 테스트시에만 사용. 생략하여 자동할당 추천. 
 
-      datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        driver_class_name: org.mariadb.jdbc.Driver
-        url: jdbc:mariadb://job01-datasource.default.svc.cluster.local:3306/jobdb
-        username: user
-        password: root
-      datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        enabled: true
+      # 동일 네임스페이스(ns : demo-batch) jdbc:mariadb://<서비스명>:3306/DB명 네임스페이스를 생략해도 된다. 
+      # 그러나 만일 다른 네임스페이스이면 jdbc:mysql://<서비스명>.<네임스페이스>.svc.cluster.local:3306/DB명 로 구분해 주어야 한다
+      # job/task/mysql/mariadb 등 동일 네임스페이스에(demo-batch) 있으면 네임스페이스 생략 가능하지만 가능하면 명확히 적는 것이 좋다.
+      # namespace 구성 : demo-batch(job/task, mysql, mariadb), demo-infra(influxdb, grafana, prometheus)
+      datasource: # 동일 네임스페이스(ns : demo-batch) jdbc:mysql://<서비스명>:3306/DB명, 만일 다른 네임스페이스이면 jdbc:mysql://<서비스명>.<네임스페이스>.svc.cluster.local:3306/DB명
         driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://job01-datasource-sub.default.svc.cluster.local:3306/jobdb
-        username: user
-        password: root
-      influx:
-        url: http://influxdb:8086
+        url: jdbc:mysql://release-db-demo-infra-mysql.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8
+        username: neodain
+        password: Kht72@eye1
+        secretName: job-01-secret  # datasource.password를 시크릿으로 참조
+        # kubectl -n demo-batch create secret generic job-01-secret --from-literal=SPRING_DATASOURCE_USERNAME='neodain' --from-literal=SPRING_DATASOURCE_PASSWORD='Kht72@eye1'
+        # secret-env.yaml 파일에서 values-dev.yaml 파일에 설정된 값을 SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD로 주입해서 사용
+      datasource_sub:
+        enabled: false
+        driver_class_name: org.mariadb.jdbc.Driver
+        url: jdbc:mariadb://release-db-demo-infra-mariadb.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8
+        username: neodain
+        password: Kht72@eye1
+        secretName: job-01-secret  # datasource_sub.password를 시크릿으로 참조(현재는 mysql과 mariadb가 동일한 비밀번호이므로 같은 시크릿 사용)
+      influx: # 다른 네임스페이스(ns : demo-infra)
+        url: http://release-infra-demo-infra-influxdb.demo-infra:8086
         logLevel: BODY
         readTimeout: 5s
         writeTimeout: 5s
         connectTimeout: 5s
+        # 개발 및 테스트 목적으로 직접 token을 직접 입력해서 할 경우 : 토큰을 values로도 받을 수 있도록 필드 추가 (secret-env.yaml 파일을 사용해서 설정이 됨)
+        # token: "0d98efcd65a918cdf43822af32edba5dd4610d41c310f25cf0d3054ef69cfe90" 
+        # 운영 환경에서는 다음과 같이 Pod를 배포전 secret 설정 : 
+        # kubectl -n demo-batch create secret generic influx-auth --from-literal=INFLUX_TOKEN="0d98efcd65a918cdf43822af32edba5dd4610d41c310f25cf0d3054ef69cfe90"
+        existingSecret: influx-auth     # influx.token을 시크릿으로 참조
+        tockenKey: INFLUX_TOKEN           # influx.token을 시크릿으로 참조할 때의 key 이름
+        # application.yml에서 ${INFLUX_TOKEN}으로 위의 설정된 환경을 읽어 실제 app POD가 실행 시 참조됨. 
+        token: "0d98efcd65a918cdf43822af32edba5dd4610d41c310f25cf0d3054ef69cfe90" 
+        # 로컬 개발 및 테스트 단계에서 values로도 받을 수 있도록 필드 추가한 부분으로 실제 토근값을 기입하여 테스트 할 수도 있다. (아래 secret-env 확장에서 쓰임)
 
-      nodeSelector:                   # 해당 Pod가 배치될 Node를 label로 지정
+      nodeSelector:                   # 해당 Pod가 배치될 Node를 label로 지조
         role: work-1                  # label key: 'role', value: 'work-1' 인 노드에만 배치
 
       affinity:                       # (선택사항) NodeAffinity / PodAffinity 등 정교한 배치 전략
@@ -204,11 +230,11 @@ batchJobs:
       volumes:                        # 컨테이너 외부에서 ConfigMap을 마운트하려면 volumeMounts와 valumes 둘 다 설정 필요.
         - name: config-volume
           configMap:                  # volumeMounts + volumes : application.yml 또는 application-prod.yml 등 Spring Boot 앱 설정파일을 Kubernetes ConfigMap으로 만들어서 Pod 내부에 마운트해 사용하기 위함 
-            name: batch-job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다. 클러스터에 실제 존재해야 함.
+            name: job-01-config # 참조할 ConfigMap 이름 (batch job app의 JVM 실행 시 --spring.config.additional-location=/config/ 옵션을 통해 이 파일을 읽게 할 수 있다. 클러스터에 실제 존재해야 함.
 
       configMap:                      # ConfigMap 만드는 방법 : kubectl create configmap batch-job-01-config --from-file=application.yml (이후, Helm에서는 configMap.name: batch-job-01-config으로 참조하면 된다)
         enabled: true                 # false 면 Helm이 ConfigMap을 만들지 않음. true로 해야 아래 name/files 옵션이 적용됨.
-        name: batch-job-01-config
+        name: job-01-config
         files: ["application.yaml"]
         # - application.yaml
         # enabled: false인 경우, 파일 마운트 안 씀. datasource/influx 등은 위 ‘env용 템플릿’이 읽어 env로 변환
@@ -221,47 +247,56 @@ batchJobs:
         prometheus.io/port: "8080"
 
       # Spring App 이면 HTTP 프로브 사용. Non App Spring Batch 이면 불 필요한 요소
-      # livenessProbe:                  # 앱이 살아 있는지 확인(죽었으면 자동 재 시작)
-      #   httpGet:
-      #     path: /actuator/health/liveness # Spring Boot actuator의 /health/liveness 앤드포인트를 사용
-      #     port: 8080
-      #   initialDelaySeconds: 30
-      #   periodSeconds: 10
-      # readinessProbe:                 # 앱이 준비됐는지 확인(준비되기 전에는 트래픽 차단)
-      #   httpGet:
-      #     path: /actuator/health/readiness
-      #     port: 8080
-      #   initialDelaySeconds: 15
-      #   periodSeconds: 5
+      livenessProbe:                  # 앱이 살아 있는지 확인(죽었으면 자동 재 시작)
+        httpGet:
+          path: /actuator/health/liveness # Spring Boot actuator의 /health/liveness 앤드포인트를 사용
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:                 # 앱이 준비됐는지 확인(준비되기 전에는 트래픽 차단)
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 15
+        periodSeconds: 5
 
-    - name: batch-job-02
+    - name: job-02
 
-      mode: cron 
+      mode: deployment 
 
       image:
-        repository: neo-batch-job
+        repository: neo-dep
         tag: "0.0.1"
         pullPolicy: IfNotPresent
 
       # command: ["java", "-jar", "/app/app.jar"]
 
       args: 
-        - "--spring.profiles.active=dev"
+        # - "--spring.profiles.active=local"
         - "--spring.config.additional-location=/config/" # Spring batch-job이 ConfigMap으로 마운트한 설정파일 읽기
-        - "--rtm.batch.job.start=202507091730"
-        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.date=20250929"
+        - "--rtm.batch.job.start=14050000"
+        - "--rtm.batch.job.end=14100000"
         - "--rtm.batch.job.chunk=200"
         - "--rtm.batch.job.interval=10"
         - "--rtm.batch.job.delay=5"
 
-      # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료
       env:
+        # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료(none : 웹 비활성, servlet : 웹 활성)
         - name: SPRING_MAIN_WEB_APPLICATION_TYPE
-          value: "none"
-        - name: JAVA_TOOL_OPTIONS
-          value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-        # - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-        #  value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+          value: "servlet"
+          # value: "none" # none : 웹 비활성, servlet : 웹 활성
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+        - name: SERVER_PORT   # Spring Boot 앱이 웹 서버를 실행하는 경우 포트 지정 (Non app이면 불필요)
+          value: "8081"
+        - name: INFLUX_TOKEN 
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-auth
+              key: token
+        # - name: JAVA_TOOL_OPTIONS
+        #   value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
 
       # 리소스 기본치
       resources:
@@ -292,28 +327,37 @@ batchJobs:
         restartPolicy: Always # OnFailure : 실패 시 재 시작 (Job / Pod)
         
       service:
-        enabled: false    
+        enabled: true    # false 인 경우 Service는 필요 없음 (job/task는 단발성 실행이므로 통신 노출 불필요)    
         type: ClusterIP 
         port: 8081
         # nodePort: 30081
 
-      datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        driver_class_name: org.mariadb.jdbc.Driver
-        url: jdbc:mariadb://job01-datasource.default.svc.cluster.local:3306/jobdb
-        username: user
-        password: root
-      datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        enabled: true
+      # 동일 네임스페이스(ns : demo-batch) jdbc:mariadb://<서비스명>:3306/DB명 네임스페이스를 생략해도 된다. 
+      # 그러나 만일 다른 네임스페이스이면 jdbc:mysql://<서비스명>.<네임스페이스>.svc.cluster.local:3306/DB명 로 구분해 주어야 한다
+      # job/task/mysql/mariadb 등 동일 네임스페이스에(demo-batch) 있으면 네임스페이스 생략 가능하지만 가능하면 명확히 적는 것이 좋다.
+      # namespace 구성 : demo-batch(job/task, mysql, mariadb), demo-infra(influxdb, grafana, prometheus)
+      datasource: # 동일 네임스페이스(ns : demo-batch) jdbc:mysql://<서비스명>:3306/DB명, 만일 다른 네임스페이스이면 jdbc:mysql://<서비스명>.<네임스페이스>.svc.cluster.local:3306/DB명
         driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://job02-datasource-sub.default.svc.cluster.local:3306/jobdb
-        username: user
-        password: root
-      influx:
-        url: http://influxdb:8086
+        url: jdbc:mysql://release-db-demo-infra-mysql.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8
+        username: neodain
+        password: Kht72@eye1
+        secretName: job-02-secret  # datasource.password를 시크릿으로 참조
+      datasource_sub: 
+        enabled: false
+        driver_class_name: org.mariadb.jdbc.Driver
+        url: jdbc:mariadb://release-db-demo-infra-mariadb.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8
+        username: neodain
+        password: Kht72@eye1
+        secretName: job-02-secret  # datasource.password를 시크릿으로 참조
+      influx: # 다른 네임스페이스(ns : demo-infra)
+        url: http://release-infra-demo-infra-influxdb.demo-infra:8086
         logLevel: BODY
         readTimeout: 5s
         writeTimeout: 5s
         connectTimeout: 5s
+        existingSecret: influx-auth     # influx.token을 시크릿으로 참조
+        tockenKey: INFLUX_TOKEN         # influx.token을 시크릿으로 참조할 때의 key 이름
+        token: "0d98efcd65a918cdf43822af32edba5dd4610d41c310f25cf0d3054ef69cfe90" 
 
       nodeSelector:
         role: work-1
@@ -340,10 +384,10 @@ batchJobs:
       volumes:
         - name: config-volume
           configMap:
-            name: batch-job-02-config    # 참조할 ConfigMap 이름
+            name: job-02-config    # 참조할 ConfigMap 이름
       configMap:
         enabled: true
-        name: batch-job-02-config
+        name: job-02-config
         files: ["application.yaml"]
 
       # Prometheus 스크랩 설정
@@ -351,58 +395,63 @@ batchJobs:
       podAnnotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/actuator/prometheus"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8081"
 
-      # files:
-      #   - application.yaml
-      # livenessProbe:
-      #   httpGet:
-      #     path: /actuator/health/liveness
-      #     port: 8080
-      #   initialDelaySeconds: 30
-      #   periodSeconds: 10
-      # readinessProbe:
-      #   httpGet:
-      #     path: /actuator/health/readiness
-      #     port: 8080
-      #   initialDelaySeconds: 15
-      #   periodSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8081
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8081
+        initialDelaySeconds: 15
+        periodSeconds: 5
 
 batchTasks:
   enabled: true
   tasks:
-    - name: batch-task-01
-      mode: cron   # job | cron | deployment 모드 선택, job/cron은 단발성 실행, deployment는 지속 실행으로 service 필요할 수 있음. 
+    - name: task-01
+      mode: deployment   # job | cron | deployment 모드 선택, job/cron은 단발성 실행, deployment는 지속 실행으로 service 필요할 수 있음. 
 
       image:
-        repository: neo-batch-task
+        repository: neo-task
         tag: "0.0.1"
         pullPolicy: IfNotPresent
 
       # command: ["java", "-jar", "/app/app.jar"]
 
       args:
-        - "--spring.cloud.task.name=task01"
+        # - "--spring.cloud.task.name=task01"
         - "--spring.config.additional-location=/config/" # Spring batch-task가 ConfigMap으로 마운트한 설정파일 읽기
-        - "--rtm.batch.job.start=202507091730"
-        - "--rtm.batch.job.end=202507091740"
+        - "--rtm.batch.job.start=202509271730"
+        - "--rtm.batch.job.end=202509271740"
         - "--rtm.batch.job.chunk=200"
         - "--rtm.batch.job.interval=10"
         - "--rtm.batch.job.delay=5"
 
       env:
+        # spring batch(Non app)이면 웹 비활성 + OOM 시 즉시 종료(none : 웹 비활성, servlet : 웹 활성)
         - name: SPRING_MAIN_WEB_APPLICATION_TYPE
-          value: "none"
-        - name: JAVA_TOOL_OPTIONS
-          value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
+          value: "servlet"
+          # value: "none" # none : 웹 비활성, servlet : 웹 활성
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
         - name: SPRING_PROFILES_ACTIVE
           value: "local"
+        - name: SERVER_PORT   # Spring Boot 앱이 웹 서버를 실행하는 경우 포트 지정 (Non app이면 불필요)
+          value: "8090"
         - name: TASK_EXECUTION_ID
           value: "ID0001"
         - name: task_name
           value: "batch_task_01"
-        # - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-        #  value: "/config/"   # 이 경로의 application.yaml을 추가로 로딩
+        - name: INFLUX_TOKEN 
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-auth
+              key: token
 
       # 리소스 기본치
       resources:
@@ -433,31 +482,40 @@ batchTasks:
                                         # 템플릿에서 잘못 쓰면 검증에 걸릴 수 있으니 무시하거나 고정 권장
         
       service:
-        enabled: false    # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요) 현재는 테스트 목적으로 true로 해서 테스트 해봄.
+        enabled: true   # false 인 경우 Service는 필요 없음 (task는 단발성 실행이므로 통신 노출 불필요) 현재는 테스트 목적으로 true로 해서 테스트 해봄.
         type: ClusterIP   # 내부 클러스터용 서비스 타입(K8s내부에서만 접근 가능)
         port: 8090
         # nodePort: 30090   # NodePort는 30000 ~ 32767 범위만 허용
 
-      datasource: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
+      # 동일 네임스페이스(ns : demo-batch) jdbc:mariadb://<서비스명>:3306/DB명 네임스페이스를 생략해도 된다. 
+      # 그러나 만일 다른 네임스페이스이면 jdbc:mysql://<서비스명>.<네임스페이스>.svc.cluster.local:3306/DB명 로 구분해 주어야 한다
+      # job/task/mysql/mariadb 등 동일 네임스페이스에(demo-batch) 있으면 네임스페이스 생략 가능하지만 가능하면 명확히 적는 것이 좋다.
+      # namespace 구성 : demo-batch(job/task, mysql, mariadb), demo-infra(influxdb, grafana, prometheus)
+      datasource: 
         driver_class_name: org.mariadb.jdbc.Driver
-        url: jdbc:mariadb://task01-datasource.default.svc.cluster.local:3306/taskdb
-        username: user
-        password: root
-      datasource_sub: # 외부의 db를 sql 패치 및 페이징하여 read 시 사용 (현재는 미사용. 향후 운영 시 내용 변경 필요)
-        enabled: false
+        url: jdbc:mariadb://release-db-demo-infra-mariadb.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8
+        username: neodain
+        password: Kht72@eye1
+        secretName: task-01-secret  # datasource.password를 시크릿으로 참조
+      datasource_sub: # 동일 네임스페이스(ns : demo-batch)
+        enabled: false 
         driver_class_name: com.mysql.cj.jdbc.Driver 
-        url: jdbc:mysql://task01-datasource-sub.default.svc.cluster.local:3306/taskdb
-        username: user
-        password: root
-      influx:
-        url: http://influxdb:8086
+        url: jdbc:mysql://release-db-demo-infra-mysql.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8
+        username: neodain
+        password: Kht72@eye1
+        secretName: task-01-secret  # datasource.password를 시크릿으로 참조
+      influx: # 다른 네임스페이스(ns : demo-infra)
+        url: http://release-infra-demo-infra-influxdb.demo-infra:8086
         logLevel: BODY
         readTimeout: 5s
         writeTimeout: 5s
         connectTimeout: 5s
+        existingSecret: influx-auth     # influx.token을 시크릿으로 참조
+        tockenKey: INFLUX_TOKEN         # influx.token을 시크릿으로 참조할 때의 key 이름
+        token: "0d98efcd65a918cdf43822af32edba5dd4610d41c310f25cf0d3054ef69cfe90" 
 
       arguments:
-        - "--runDate=2025-07-10" 
+        - "--runDate=2025-09-18" 
           # task launch my-batch-task --arguments "--runData=2005-07-10" 시 
           # spring.batch.job.enabled=true 일 경우, 자동으로 JobParameter로 인식
           # JobLauncherApplicationRunner가 자동 실행
@@ -487,10 +545,10 @@ batchTasks:
       volumes:
         - name: config-volume
           configMap:
-            name: batch-task-01-config    # 참조할 ConfigMap 이름
+            name: task-01-config    # 참조할 ConfigMap 이름
       configMap:
         enabled: true
-        name: batch-task-01-config
+        name: task-01-config
         files : ["application.yaml"]
 
       # Prometheus 스크랩 설정
@@ -500,25 +558,25 @@ batchTasks:
         prometheus.io/path: "/actuator/prometheus"
         prometheus.io/port: "8080"
 
-      # livenessProbe:
-      #   httpGet:
-      #     path: /actuator/health/liveness
-      #     port: 8080
-      #   initialDelaySeconds: 30
-      #   periodSeconds: 10
-      # readinessProbe:
-      #   httpGet:
-      #     path: /actuator/health/readiness
-      #     port: 8080
-      #   linitialDelaySeconds: 15
-      #   periodSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8090
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8090
+        linitialDelaySeconds: 15
+        periodSeconds: 5
 
 
 # =========================
 # MySQL
 # =========================
 mysql:
-  enabled: true
+  enabled: true 
 
   image:
     repository: mysql
@@ -530,16 +588,16 @@ mysql:
       valueFrom:
         secretKeyRef:
           name: mysql-auth
-          key: root
+          key: root_password
     - name: MYSQL_DATABASE
       value: demo
     - name: MYSQL_USER
-      value: neodain
+      value: neodain 
     - name: MYSQL_PASSWORD    # value: Kht72@eye1
       valueFrom:
         secretKeyRef:
           name: mysql-auth
-          key: userpass
+          key: user_password 
 
   service:
     type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
@@ -585,7 +643,7 @@ mysql:
 # MariaDB
 # =========================
 mariadb:
-  enabled: true
+  enabled: true 
 
   image:
     repository: mariadb
@@ -597,16 +655,16 @@ mariadb:
       valueFrom:
         secretKeyRef:
           name: mysql-auth
-          key: root
+          key: root_password
     - name: MARIADB_DATABASE
       value: demo
     - name: MARIADB_USER
-      value: neodain
+      value: neodain 
     - name: MARIADB_PASSWORD    # value: Kht72@eye1
       valueFrom:
         secretKeyRef:
           name: mysql-auth
-          key: userpass
+          key: user_password
 
   service:
     type: NodePort            # NodePort : 외부에서 접근 가능하도록 노출
@@ -650,7 +708,7 @@ mariadb:
 # InfluxDB(v2)
 # =========================
 influxdb:
-  enabled: true
+  enabled: false 
 
   image:
     repository: influxdb
@@ -991,9 +1049,9 @@ scdf:
 
     # 외부 DB 사용 여부 (SCDF 서버의 메타데이터 저장용)
     externalDatabase:    
-      host: mariadb.default.svc.cluster.local   # DNS 이름:<service-name>.<namespace>.svc.cluster.local
+      host: release-db-demo-infra-mariadb.demo-batch   # DNS 이름:<service-name>.<namespace>.svc.cluster.local
       port: 3306
-      user: neodain
+      user: neodain 
       password: Kht72@eye1
       database: demo
       # existingSecret: scdf-db-secret   # ← Secret로 관리 시 활성화 (keys: mariadb-password 등 차트 스키마에 맞춰)
@@ -1090,7 +1148,7 @@ scdf:
 
     # Skipper도 외부 DB 분리 권장
     externalDatabase:
-      host: mariadb.default.svc.cluster.local
+      host: release-db-demo-infra-mariadb.demo-batch   # DNS 이름:<service-name>.<namespace>.svc.cluster.local
       port: 3306
       user: neodain 
       password: Kht72@eye1 

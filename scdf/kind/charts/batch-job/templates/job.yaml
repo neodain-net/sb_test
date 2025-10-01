@@ -55,19 +55,32 @@ spec:
             - configMapRef:
                 name: {{ $envcm }}
             {{- end }}
+
+            {{- if and .datasource .datasource.secretName }}
             - secretRef:
-                name: {{ include "batch-job.resname" (dict "root" $root "name" .name) }}-secret
-                optional: true
+                name: {{ .datasource.secretName }}  
+            {{- else }}
+            - secretRef:
+                name: {{ include "batch-job.resname" (dict "root" $ "name" .name) }}-secret  # ← 우리가 만든 통합 Secret
+            {{- end }}
+
+            {{- if and .datasource_sub .datasource_sub.enabled .datasource_sub.secretName }}
+            - secretRef:
+                name: {{ .datasource_sub.secretName }}
+            {{- end }}
+
+            {{- if and .influx .influx.existingSecret }}
+            - secretRef:
+                name: {{ .influx.existingSecret }}  
+            {{- end }}
+
           {{/* # ====== 혼용 포인트: 파일 마운트 (application.yaml 등) ====== */}}
           {{/* 파일 기반 ConfigMap이 있으면 /config 경로에 마운트하고 SPRING_CONFIG_ADDITIONAL_LOCATION 환경변수로 지정 */}}
           {{- if and .configMap .configMap.enabled .configMap.files }}
+          {{- with .env }}
           env:
-            - name: SPRING_MAIN_WEB_APPLICATION_TYPE
-              value: "none"
-            - name: JAVA_TOOL_OPTIONS
-              value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-              value: "/config/"
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: config-volume
               mountPath: /config

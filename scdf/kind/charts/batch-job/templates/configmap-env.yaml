@@ -21,18 +21,21 @@ data:
   SPRING_DATASOURCE_DRIVER_CLASS_NAME: "{{ .datasource.driver_class_name }}"
   SPRING_DATASOURCE_URL: "{{ .datasource.url }}"
   SPRING_DATASOURCE_USERNAME: "{{ .datasource.username }}"
+  SPRING_DATASOURCE_PASSWORD: "{{ .datasource.password }}"
   {{- end }}
   {{- if and $hasDSS .datasource_sub.enabled }}
-  APP_DATASOURCE_SUB_DRIVER_CLASS_NAME: "{{ .datasource_sub.driver_class_name }}"
-  APP_DATASOURCE_SUB_URL: "{{ .datasource_sub.url }}"
-  APP_DATASOURCE_SUB_USERNAME: "{{ .datasource_sub.username }}"
+  SPRING_DATASOURCE_SUB_DRIVER_CLASS_NAME: "{{ .datasource_sub.driver_class_name }}"
+  SPRING_DATASOURCE_SUB_URL: "{{ .datasource_sub.url }}"
+  SPRING_DATASOURCE_SUB_USERNAME: "{{ .datasource_sub.username }}"
+  SPRING_DATASOURCE_SUB_PASSWORD: "{{ .datasource_sub.password }}"
   {{- end }}
   {{- if $hasIFX }}
-  APP_INFLUX_URL: "{{ .influx.url }}"
-  APP_INFLUX_LOG_LEVEL: "{{ .influx.logLevel }}"
-  APP_INFLUX_READ_TIMEOUT: "{{ .influx.readTimeout }}"
-  APP_INFLUX_WRITE_TIMEOUT: "{{ .influx.writeTimeout }}"
-  APP_INFLUX_CONNECT_TIMEOUT: "{{ .influx.connectTimeout }}"
+  INFLUX_TOKEN: "{{ .influx.token }}"
+  INFLUX_URL: "{{ .influx.url }}"
+  INFLUX_LOG_LEVEL: "{{ .influx.logLevel }}"
+  INFLUX_READ_TIMEOUT: "{{ .influx.readTimeout }}"
+  INFLUX_WRITE_TIMEOUT: "{{ .influx.writeTimeout }}"
+  INFLUX_CONNECT_TIMEOUT: "{{ .influx.connectTimeout }}"
   {{- end }}
 ---
 {{- end }}

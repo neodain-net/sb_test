@@ -1,25 +1,25 @@
 {{- $root := . -}}
-{{- range .Values.batchTasks.tasks }}
-{{- if .service.enabled }}
+{{- range $i, $task := .Values.batchTasks.tasks }}
+{{- if and $task.service.enabled (eq (default "deployment" $task.mode) "deployment") }}
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}
+  name: {{ include "batch-task.resname" (dict "root" $root "name" $task.name) }}
   labels:
     {{- include "batch-task.labels" $root | nindent 4 }}
-    app.kubernetes.io/component: {{ .name }}
+    app.kubernetes.io/component: {{ $task.name }}
 spec:
-  type: {{ .service.type | default "ClusterIP" }}
+  type: {{ default "ClusterIP" $task.service.type }}
   selector:
     {{- include "batch-task.selectorLabels" $root | nindent 4 }}
-    app.kubernetes.io/component: {{ .name }}
+    app.kubernetes.io/component: {{ $task.name }}
   ports:
-    - name: {{ .service.name | default "http" | lower }}
-      port: {{ .service.port }}
-      targetPort: {{ .service.targetPort | default .service.port }}
-      {{- if and (eq (.service.type | default "ClusterIP") "NodePort") .service.nodePort }}
-      nodePort: {{ .service.nodePort }}
+    - name: {{ default "http" $task.service.name | lower }}
+      port: {{ int $task.service.port }}
+      targetPort: {{ int (default $task.service.port $task.service.targetPort) }}
+      {{- if and (eq (default "ClusterIP" $task.service.type) "NodePort") $task.service.nodePort }}
+      nodePort: {{ int $task.service.nodePort }}
       {{- end }}
 {{- end }}
 {{- end }}
-

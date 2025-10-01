@@ -12,7 +12,7 @@ public class SpringBootBatchDemoApplication {
 
     @GetMapping("/hello")
     public String hello() {
-        return "Hello, Spring Boot Batch Demo!";
+        return "Hello, Spring Boot Batch Demo! : Task-Demployment is running.";
     }
     
     public static void main(String[] args) {

@@ -49,18 +49,166 @@
 # spring.config.import=optional:file:/config/extra1.yaml,optional:file:/config/extra2.yaml
 # 또는 application-xxx.yaml + --spring.profiles.active=xxx
 
-spring:
-  main:
-    web-application-type: none   # 배치용(웹 안 띄움)
-  jackson:
-    default-property-inclusion: non_null
+# spring:
+#   profiles:
+#     active: local
+#     # default로 사용할 프로필 선택 (local)
 
-logging:
-  level:
-    root: INFO
-    org.springframework: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
+# server:
+#   port: 8080  # Spring Boot 애플리케이션이 실행될 포트 번호를 지정한다. 기본값은 8080이다.
+#   servlet:
+#     context-path: /  # 애플리케이션의 컨텍스트 경로를 설정한다. 기본값은 "/"이다.
+
+# logging:
+#   level:
+#     root: INFO  # 기본 로그 레벨은 INFO로 유지
+#     # org.springframework.batch.item.database: DEBUG
+#     # com.neodain.springbootbatchdemo.service: DEBUG  # service 패키지의 로그 레벨을 DEBUG로 설정
+#     # com.neodain.springbootbatchdemo.controller: DEBUG  # controller 패키지의 로그 레벨을 DEBUG로 설정
+#     com.neodain.springbootbatchdemo.service.impl.DevopsMemberServiceImpl: DEBUG # DevopsMemberServiceImpl 클래스의 로그 레벨을 DEBUG로 설정
+#     # okhttp3: WARN
+
+# Actuator 설정 : spring boot actuator를 사용하여 애플리케이션의 상태를 모니터링하고 관리할 수 있도록 한다.
+# Actuator는 애플리케이션의 상태, 메트릭, 헬스 체크, 환경 정보 등을 제공하는 엔드포인트를 자동으로 생성한다.
+# Actuator 엔드포인트는 기본적으로 /actuator 경로로 접근할 수 있다.
+# Actuator 엔드포인트를 활성화하려면 spring-boot-starter-actuator 의존성을 추가해야 한다.
+# Actuator 엔드포인트를 통해 애플리케이션의 헬스 체크, 메트릭, 환경 정보 등을 확인할 수 있다.
+# 헬스 체크 엔드포인트를 통해 애플리케이션의 상태를 확인할 수 있다.
+# curl http://localhost:8080/actuator/health
+# curl http://localhost:8080/actuator/info
+# liveness 엔드포인트를 통해 애플리케이션이 살아있는지 확인할 수 있다.
+# liveness 엔드포인트는 애플리케이션이 정상적으로 동작하고 있는지 확인하는 데 사용된다.
+# curl http://localhost:8080/actuator/health/liveness
+# 응답 예시:
+# { "status": "UP", "details": { "livenessState": "ALIVE" } }
+# readiness 엔드포인트를 통해 애플리케이션이 준비 상태인지 확인할 수 있다.
+# readiness 엔드포인트는 애플리케이션이 요청을 처리할 준비가 되었는지 확인하는 데 사용된다.
+# curl http://localhost:8080/actuator/health/readiness   
+# 응답 예시:
+# { "status": "UP", "details": { "readinessState": "READY" } }
+# info 엔드포인트를 통해 애플리케이션의 정보(버전, 빌드 시간 등)를 확인할 수 있다.
+# curl http://localhost:8080/actuator/info  
+# 응답 예시:
+# { "app": { "name": "SpringBootBatchDemo", "version": "1.0.0", "description": "Spring Boot Batch Demo Application" } }
+# 메트릭 엔드포인트를 통해 애플리케이션의 메트릭(메모리 사용량, CPU 사용량 등)를 확인할 수 있다.
+# curl http://localhost:8080/actuator/metrics   
+# 응답 예시:
+# { "names": [ "jvm.memory.used", "jvm.gc.pause", "jvm.threads.live", "system.cpu.count", "process.uptime" ] }
+# 메트릭 엔드포인트를 통해 특정 메트릭의 상세 정보를 확인할 수 있다.
+# curl http://localhost:8080/actuator/metrics/jvm.memory.used
+# 응답 예시:
+# { "name": "jvm.memory.used", "description": "Memory used by the JVM", "baseUnit": "bytes", "measurements": [ { "statistic": "VALUE", "value": 12345678 } ], "availableTags": [ { "tag": "area", "values": [ "heap", "nonheap" ] } ] }
+
+# management:
+#   endpoints:
+#     web:
+#       exposure:
+#         include: '*'  # 모든 엔드포인트를 노출
+#       base-path: /actuator  # Actuator 엔드포인트의 기본 경로 설정
+#   endpoint:
+#     health:
+#       probes:
+#         enabled: true  # liveness 및 readiness 프로브 활성화
+#       show-details: always  # 헬스 체크 상세 정보를 항상 표시
+#     info:
+#       access: unrestricted  # info 엔드포인트에 대한 접근을 제한하지 않음
+#       # enabled: true  # Deprecated Property : info 엔드포인트 활성화
+#   health:
+#     db:
+#       enabled: true  # 데이터베이스 헬스 체크 활성화
+#     diskspace:
+#       enabled: true  # 디스크 공간 헬스 체크 활성화
+
+# ---
+
+# spring:
+#   config:
+#     activate:
+#       on-profile: local
+
+#   # cloud:
+#   #   task:
+#   #     enabled: false  # Spring Cloud Task 기능을 비활성화하여 TransactionManager 충돌 문제를 방지한다.
+#   #     # enabled: true  # Spring Cloud Task 기능을 활성화하려면 주석을 제거한다. 
+
+#   batch:
+#     job:
+#       enabled: false  # 애플리케이션 시작 시 배치 작업이 자동으로 실행되지 않도록 설정한다. (자동 실행 방지 : spring batch job이 아닌 Web app으로 실행할 때 적용)
+#       name: SpringBootBatchDemo
+#       # spring.batch.table-prefix: BATCH_  # 배치 메타데이터 테이블의 접두사를 지정한다. 기본값은 BATCH_ 이다.
+#       # spring.batch.schema: classpath:org/springframework/batch/core/schema-mysql.sql  
+#       # MySQL용 스키마 파일을 지정한다. 다른 데이터베이스를 사용할 경우 해당 데이터베이스에 맞는 스키마 파일을 지정해야 한다. 
+
+# #    jdbc:
+# #      initialize-schema: always  # 배치 애플리케이션 초기화시에 메타데이터와 관련된 스키마도 같이 초기화 되도록 한다.
+# #      # spring5.0 이후 @EnableBatchProceesing을 사용하면 위 옵션을 막아 생성이 안된다.
+# #      platform: mariadb
+
+#   # datasource_h2:
+#   # h2:
+#   #   console:
+#   #     enabled: true       # H2 콘솔을 활성화하여 웹 브라우저에서 H2 데이터베이스를 확인할 수 있도록 한다.
+#   #     path: /h2-console   # H2 콘솔의 경로를 설정한다. 기본값은 /h2-console 이다. (http://localhost:8080/h2-console)
+
+
+#   # datasource:
+#   #   driver-class-name: org.h2.Driver
+#   #   url: jdbc:h2:mem:testdb
+#   #   driverClassName: org.h2.Driver
+#   #   username: sa
+#   #   password:
+
+#   datasource:
+#     driver-class-name: com.mysql.cj.jdbc.Driver
+#     url: jdbc:mysql://release-db-demo-infra-mysql.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&serverTimezone=Asia/Seoul&characterEncoding=utf8
+#     # url: jdbc:mysql://localhost:3306/spring_batch_demo?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Seoul
+#     # url: jdbc:mysql://localhost:3307/demo
+#     username: ${SPRING_DATASOURCE_USERNAME}
+#     password: ${SPRING_DATASOURCE_PASSWORD}
+
+#   jpa:
+#     show-sql: true  # Hibernate가 생성하는 SQL을 로그에 출력하도록 설정한다. false로 설정하면 SQL 로그가 출력되지 않는다.
+#     hibernate.ddl-auto: create-drop   # ddl-auto: create-drop # 개발 환경에서만 사용, 프로덕션 환경에서는 사용하지 않는다.
+#                                       # create-drop: 애플리케이션 시작 시 데이터베이스를 생성하고, 종료 시 삭제한다.
+#     properties:
+#       hibernate.jdbc.batch_size: 100
+#       hibernate.dialect: org.hibernate.dialect.MySQLDialect
+
+#   # datasource_mysql:
+#   #   driver-class-name: com.mysql.cj.jdbc.Driver
+#   #   url: jdbc:mysql://release-db-demo-infra-mysql.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&serverTimezone=Asia/Seoul&characterEncoding=utf8
+#   #   # url: jdbc:mysql://localhost:3306/spring_batch_demo?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Seoul
+#   #   # url: jdbc:mysql://localhost:3307/demo
+#   #   username: root 
+#   #   password: Kht72@eye1 
+
+#   # datasource:
+#   #   driver-class-name: org.mariadb.jdbc.Driver
+#   #   url: jdbc:mariadb://release-db-demo-infra-mariadb.demo-batch:3306/demo?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&serverTimezone=Asia/Seoul&characterEncoding=utf8
+#   #   # url: jdbc:mariadb://localhost:3308/demo
+#   #   username: ${SPRING_DATASOURCE_USERNAME}
+#   #   password: ${SPRING_DATASOURCE_PASSWORD}
+#   #   # password: {{MARIADB_PASSWORD}} // application.yml에서 설정 할 경우, {{MARIADB_PASSWORD}}로 설정 : single datasource
+#   # jpa:
+#   #   hibernate:
+#   #     ddl-auto: create-drop 
+#   #   show-sql: true
+#   #   properties:
+#   #     hibernate.jdbc.batch_size: 100
+#   #     hibernate.dialect: org.hibernate.dialect.MariaDBDialect
+
+# influx:
+#   url: http://release-infra-demo-infra-influxdb.demo-infra:8086
+#   # url: http://localhost:8087
+#   username: ${SPRING_DATASOURCE_USERNAME}
+#   password: ${SPRING_DATASOURCE_PASSWORD}
+#   token: ${INFLUX_TOKEN}
+#   org: neodain 
+#   bucket: neodain 
+#   logLevel: BODY
+#   readTimeout: 5s
+#   writeTimeout: 5s
+#   connectTimeout: 5s
 
 # 필요 시 추가 파일 가져오기(여러 파일 혼용 시)
 # spring:

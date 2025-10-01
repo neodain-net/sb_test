@@ -1,0 +1,12 @@
+# spring:
+#   main:
+#     web-application-type: none   # 배치용(웹 안 띄움)
+#   jackson:
+#     default-property-inclusion: non_null
+
+# logging:
+#   level:
+#     root: INFO
+#     org.springframework: INFO
+#   pattern:
+#     console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"

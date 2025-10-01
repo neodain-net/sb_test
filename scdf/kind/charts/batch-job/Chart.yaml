@@ -1,6 +1,6 @@
 # 차트 메타 정보 정의 (이름, 버전 등)
 apiVersion: v2
-name: batch-job
+name: batch
 version: 0.0.1
 description: A Helm chart for deploying Spring Batch Job apps
 appVersion: "1.0.0"

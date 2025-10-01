@@ -47,9 +47,25 @@ spec:
             {{- if $envcm_exists }}
             - configMapRef: { name: {{ $envcm }} }
             {{- end }}
+
+            {{- if and .datasource .datasource.secretName }}
             - secretRef:
-                name: {{ include "batch-task.resname" (dict "root" $root "name" .name) }}-secret
-                optional: true 
+                name: {{ .datasource.secretName }}  
+            {{- else }}
+            - secretRef:
+                name: {{ include "batch-task.resname" (dict "root" $ "name" .name) }}-secret  # ← 우리가 만든 통합 Secret
+            {{- end }}
+
+            {{- if and .datasource_sub .datasource_sub.enabled .datasource_sub.secretName }}
+            - secretRef:
+                name: {{ .datasource_sub.secretName }}
+            {{- end }}
+
+            {{- if and .influx .influx.existingSecret }}
+            - secretRef:
+                name: {{ .influx.existingSecret }}  
+            {{- end }}
+
           {{- with .resources }}
           resources:
             requests:
@@ -60,13 +76,10 @@ spec:
               memory: {{ .limits.memory | default "512Mi" | quote }}
           {{- end }}
           {{- if and .configMap .configMap.enabled .configMap.files }}
+          {{- with .env }}
           env:
-            - name: SPRING_MAIN_WEB_APPLICATION_TYPE
-              value: "none"
-            - name: JAVA_TOOL_OPTIONS
-              value: "-XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-              value: "/config/"
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: config-volume
               mountPath: /config
