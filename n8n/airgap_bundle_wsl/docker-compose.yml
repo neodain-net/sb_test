@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+    environment:
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=n8npass
+      - POSTGRES_DB=n8n
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.4-alpine@sha256:ee9e8748ace004102a267f7b8265dab2c618317df22507b89d16a8add7154273
+    command: ["redis-server","--save",""]
+    volumes:
+      - ./redis_data:/data
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest@sha256:14248a2a18487c3e1669d2e2bfeee797f0648f606e0c168e36ef20c3a1f47eac
+    depends_on: [postgres, redis]
+    env_file: [.env]
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=n8npass
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - WEBHOOK_URL=http://localhost:15678/
+    ports:
+      - "15678:5678"
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./files:/files
+    restart: unless-stopped
+    deploy:
+      x-pull_policy: never   # compose v2.20+ 확장 : x-pull_policy: &never never

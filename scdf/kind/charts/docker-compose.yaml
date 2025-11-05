@@ -83,8 +83,8 @@ services:
       - batch_network
 
   spring-batch:
-    image: neo-batch-task:0.0.1
-    container_name: spring-batch-task 
+    image: neo-dep:0.0.1
+    container_name: spring-batch-app 
     command:
       - "--rtm.batch.job.start=202507091730"
       - "--rtm.batch.job.end=202507091740"

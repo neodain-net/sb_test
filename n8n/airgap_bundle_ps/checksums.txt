@@ -1,0 +1,3 @@
+bb1985a052e4016db63b9130115f682b90090b8f6783556b1f7200a694dc1e7e  D:\n8n\airgap_bundle_ps\n8n-latest.tar
+a8619e6a7ec1faa24b1ed9b52c2c8a301fd3bdc4be0a5d9796892465f0e6dd44  D:\n8n\airgap_bundle_ps\postgres-16-alpine.tar
+63238a0f403c3d6cca7a8ed73921522337c4264c00277ad773ac154c385b8f22  D:\n8n\airgap_bundle_ps\redis-7.4.4-alpine.tar

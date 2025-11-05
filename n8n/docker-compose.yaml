@@ -1,0 +1,308 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+    environment:
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=n8npass
+      - POSTGRES_DB=n8n
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - batch_network
+
+  redis:
+    image: redis:7.4.4-alpine@sha256:ee9e8748ace004102a267f7b8265dab2c618317df22507b89d16a8add7154273
+    command: ["redis-server","--save",""] # 스냅샷 비활성화 (데이터 영속성 비활성화 : Queue 모드에 권장)
+    volumes:
+      - ./redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - batch_network
+
+  # 컨테이너 ollama service
+  ollama:
+    image: ollama/ollama:latest
+    # GPU 사용 시 주석해제 (NVIDIA Container Toolkit 필요)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    environment:
+      OLLAMA_NUM_CTX: 8192     # 컨텍스트 8k (defauult : 4096)
+      OLLAMA_KEEP_ALIVE: 2h    # 모델 예열 유지(초기 지연 줄이기) 비활성 시간 후 종료 설정
+      # OLLAMA_NUM_PARALLEL: "2"        # 동시 요청 수 : 병렬 처리 수 설정 (기본값: 2)
+      OLLAMA_HOST: "0.0.0.0:11435"      # 모든 인터페이스에서 수신 대기 : 외부 접속이 가능하게 설정하려면 변경. 
+      # 아래의 ports와 함께 로컬 호스트 Ollama와 포트 충돌 시 0.0.0.0:11435와 함께 ports도 11435:11434로 변경 필요
+    ports:
+      - "11435:11434"  # Ollama API 포트 매핑 : 로컬 호스트 Ollama와 충돌 시 포트 변경(예: 11435:11434)
+    # container_name: ollama
+    volumes:
+      - ./ollama_models:/root/.ollama  # Ollama model 저장을 위한 볼륨 매핑
+      - ./certs/corp-rootCA.crt:/usr/local/share/ca-certificates/corp-rootCA.crt:ro
+    entrypoint: ["/bin/sh", "-lc","update-ca-certificates > /dev/null 2>&1 || true; /bin/ollama serve"]
+
+    restart: unless-stopped
+    networks:
+      - batch_network
+
+  n8n:
+    image: n8nio/n8n:latest@sha256:14248a2a18487c3e1669d2e2bfeee797f0648f606e0c168e36ef20c3a1f47eac # 내부망이면 사내 레지스트리 경로로 교체
+    restart: unless-stopped
+    ports:
+      - "15678:5678"
+    env_file:
+      - .env
+    environment:
+      - WEBHOOK_URL=http://localhost:15678/
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}      # .env 파일에 설정 필요
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}  # .env 파일에 설정 필요
+      # - N8N_HOST=localhost # .env 파일에 설정 필요  
+      - N8N_HOST=0.0.0.0 # 모든 인터페이스에서 수신 대기 : 외부 접속이 가능하게
+      # - N8N_PORT=5678  
+      - N8N_PROTOCOL=http
+      # - NODE_ENV=production               # 운영 환경 설정 (추가 : production, development)
+      # - NODE_ENV=development               # 운영 환경 설정 (추가 가능: development)
+
+      # 실행큐 모드 설정
+      - EXECUTION_MODE=queue            # 실행 모드 설정 (추가 가능: regular, queue)
+      - QUEUE_BULL_REDIS_HOST=redis      # Redis 호스트 설정 (큐 모드에서 필요)
+      - QUEUE_BULL_REDIS_PORT=6379       # Redis 포트 설정 (큐 모드에서 필요)
+      - QUEUE_BULL_REDIS_DB=0            # Redis DB 번호 설정 (큐 모드에서 필요)
+      - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}  # .env 파일에 설정 필요 (큐 모드에서 필요)
+
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}  # .env 파일에 설정 필요
+      # - N8N_USER_FOLDER=/home/node/.n8n    # 사용자 폴더 경로 설정
+      # - N8N_DISABLE_TELEMETRY=true        # 익명 통계 비활성화
+      # - N8N_PUBLIC_API=false              # 공개 API 비활성화
+      # - N8N_ALLOW_CUSTOM_API_ENDPOINTS=false  # 사용자 정의 API 엔드포인트 비활성화
+      # - N8N_WORKFLOW_TAGS_DISABLED=false   # 워크플로우 태그 활성화
+      # - N8N_SAVE_DATA_ON_ERROR=true       # 오류 시 데이터 저장 활성화
+      # - N8N_SAVE_DATA_ON_SUCCESS=true     # 성공 시 데이터 저장 활성화
+
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=true  # 실행 성공 시 데이터 저장
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=true
+      - GENERIC_TIMEZONE=Asia/Seoul
+
+      # Database 설정 (postgres 사용)
+      - DB_TYPE=postgresdb # 데이터베이스 유형 설정 (추가 가능: postgresdb, mysqldb, mariadb, sqlite, mongodb)
+      - DB_POSTGRESDB_HOST=postgres # Postgres 호스트 설정
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=n8npass
+
+      # - DB_TYPE=mysql
+      # - DB_MYSQLDB_HOST=mysql
+      # - DB_MYSQLDB_PORT=3306
+      # - DB_MYSQLDB_PORT=3307
+      # - DB_MYSQLDB_DATABASE=${DOCKER_MYSQL_DATABASE}
+      # - DB_MYSQLDB_USER=${DOCKER_MYSQL_USER}
+      # - DB_MYSQLDB_PASSWORD=${DOCKER_MYSQL_PASSWORD}
+
+      - N8N_LOG_LEVEL=info                # 로그 레벨 설정  (추가 가능: info, debug, warn, error)
+      - N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true  # 커뮤니티 패키지 도구 사용 허용 설정
+
+      - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/corp-rootCA.crt  # 사내 인증서 추가
+
+    depends_on: [ollama, postgres, redis]
+    # depends_on:
+      # - mysql      # mysql 컨테이너 의존성 설정
+      # - redis      # redis 컨테이너 의존성 설정
+      # - mariadb    # mariadb 컨테이너 의존성 설정
+      # - influxdb   # influxdb 컨테이너 의존성 설정
+      # - grafana    # grafana 컨테이너 의존성 설정
+      # - spring-batch  # spring-batch 컨테이너 의존성 설정
+
+    healthcheck:
+      # test: ["executable", "arg"]
+      test: ["CMD", "node", "-e", "process.exit((Date.now()-require('fs').statSync('/home/node/.n8n').mtimesMs)<86400000?0:0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    volumes:
+      - ./n8n_data:/home/node/.n8n   # 설정/암호키/데이터 저장
+      - ./files:/files               # 보고서/첨부물 등 내부 공유 폴더
+      - ./certs/corp-rootCA.crt:/usr/local/share/ca-certificates/corp-rootCA.crt:ro
+    
+    # 컨테이너 부팅 시 시스템 CA 갱신 → 이후 n8n 실행
+    entrypoint: ["/bin/sh", "-lc", "update-ca-certificates > /dev/null 2>&1 || true; exec docker-entrypoint.sh n8n"]
+
+    networks:
+      - batch_network
+
+    deploy:
+      x-pull_policy: never   # compose v2.20+ 확장 : x-pull_policy: &never never
+
+  mysql:    # container_1 service
+    image: mysql:8.0
+    container_name: mysql80
+    restart: unless-stopped
+    # restart: always  # 도커 시작 시 자동 실행
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOCKER_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DOCKER_MYSQL_DATABASE}
+      MYSQL_USER: ${DOCKER_MYSQL_USER}
+      MYSQL_PASSWORD: ${DOCKER_MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - d:/Database/mysql/docker/mysql80:/var/lib/mysql
+
+    networks:
+      - batch_network
+
+
+  mariadb:    # container_2 service
+    image: mariadb:10
+    container_name: mariadb
+    restart: unless-stopped
+    # restart: always  # 도커 시작 시 자동 실행
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOCKER_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DOCKER_MYSQL_DATABASE}
+      MYSQL_USER: ${DOCKER_MYSQL_USER}
+      MYSQL_PASSWORD: ${DOCKER_MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+
+    ports:
+      - "3308:3306"
+
+    volumes:
+      - d:/Database/mariadb/docker/mariadb10:/var/lib/mysql
+
+    networks:
+      - batch_network
+
+
+  influxdb:   # container_3 service
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8087:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN}
+
+    restart: unless-stopped
+
+    volumes:
+      - d:/database/influx/docker/influxdb:/var/lib/influxdb2
+
+    networks:
+      - batch_network
+
+  grafana:    # container_4 service
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+
+    restart: unless-stopped
+
+    depends_on:
+      - influxdb  # influx container
+
+    volumes:
+      - d:/database/grafana/docker/grafana10:/var/lib/grafana
+
+    networks:
+      - batch_network
+
+  spring-batch:
+    image: neo-dep:0.0.1
+    container_name: spring-batch-app
+    command:
+      - "--rtm.batch.job.start=202507091730"
+      - "--rtm.batch.job.end=202507091740"
+      - "--rtm.batch.job.chunk=200"
+      - "--rtm.batch.job.interval=10"
+      - "--rtm.batch.job.delay=5"
+    ports:
+      - "8082:8080"
+
+    # restart: unless-stopped 
+
+    depends_on:
+      - mariadb  # mariadb container
+
+    networks:
+      - batch_network
+
+
+networks:
+  batch_network:
+    driver: bridge
+    # driver_opts:
+      # subnet: "255.255.255.0"
+      # IPAddress: "10.0.0.2"
+
+
+
+
+###################################################################################
+# 관련 명령어 정리
+#
+###################################################################################
+#
+# 기본 올리기 / 내리기
+# docker compose up -d
+# docker compose down
+
+# 특정 파일 지정
+# docker compose -f docker-compose.yaml up -d
+
+# 특정 서비스만 (의존 컨테이너 제외)
+# docker compose up -d --no-deps service-a
+
+# 여러 파일 합치기(override)
+# docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+
+# 프로필로 선택 실행
+# docker compose --profile backend up -d
+# export COMPOSE_PROFILES="backend,obs"; docker compose up -d
+
+# 상태/로그
+# docker compose ps
+# docker compose logs -f service-a
+
+# 중지/삭제/재시작
+# docker compose stop service-a
+# docker compose rm -f service-a
+# docker compose restart service-a
+
+# 이미지 관련
+# docker compose pull
+# docker compose build --no-cache
+
+# 컨테이너 내부 셸
+# docker compose exec service-a sh    # 또는 bash
+
+# 설정 확인(머지 결과/프로필 목록)
+# docker compose config
+# docker compose config --profiles
+
