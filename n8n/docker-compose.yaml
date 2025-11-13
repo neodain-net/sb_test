@@ -56,6 +56,7 @@ services:
       - ./certs/corp-rootCA.crt:/usr/local/share/ca-certificates/corp-rootCA.crt:ro
     entrypoint: ["/bin/sh", "-lc","update-ca-certificates > /dev/null 2>&1 || true; /bin/ollama serve"]
 
+    gpus: all  # GPU 사용 시 필요 (NVIDIA Container Toolkit 필요)
     restart: unless-stopped
     networks:
       - batch_network
@@ -94,7 +95,9 @@ services:
       # - N8N_WORKFLOW_TAGS_DISABLED=false   # 워크플로우 태그 활성화
       # - N8N_SAVE_DATA_ON_ERROR=true       # 오류 시 데이터 저장 활성화
       # - N8N_SAVE_DATA_ON_SUCCESS=true     # 성공 시 데이터 저장 활성화
-
+      
+      - EXECUTION_TIMEOUT=-1            # 전역 실행 타임아웃 설정 (-1: 무제한) 
+      - EXECUTION_TIMEOUT_MAX=21600     # 개별 워크플로우에서 최대 실행 타임아웃 설정 (초 단위, 기본값: 21600초 = 6시간) 
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=true  # 실행 성공 시 데이터 저장
       - EXECUTIONS_DATA_SAVE_ON_ERROR=true
       - GENERIC_TIMEZONE=Asia/Seoul
